@@ -7,6 +7,7 @@ import { TestTube2, AlertCircle, CheckCircle } from "lucide-react"
 import { getTestResultRepository } from "@/lib/repositories"
 import { getPatientRepository } from "@/lib/repositories"
 import { getClinicalTestRepository } from "@/lib/repositories"
+import { ViewReportButton } from "./view-report-button"
 
 export async function TestResultsList() {
   const user = await getCurrentUser()
@@ -25,16 +26,20 @@ export async function TestResultsList() {
   ])
 
   // Fetch patient and test details for each result
-  const resultsWithDetails = await Promise.all(
-    testResults.map(async (result) => {
-      const [patient, test] = await Promise.all([
-        result.patient_id
-          ? patientRepo.findById(result.patient_id).catch(() => null)
-          : null,
-        result.test_id
-          ? clinicalTestRepo.findById(result.test_id).catch(() => null)
-          : null,
-      ])
+            const resultsWithDetails = await Promise.all(
+              testResults.map(async (result) => {
+                const [patient, test] = await Promise.all([
+            result.patient_id
+              ? patientRepo.findById(result.patient_id).catch(() => null)
+              : null,
+
+            result.test_code
+              ? clinicalTestRepo
+                  .findByTestCode(result.test_code, result.clinic_id)
+                  .catch(() => null)
+              : null,
+          ])
+
       return { ...result, patient, test }
     })
   )
@@ -109,9 +114,11 @@ export async function TestResultsList() {
                   <p>{result.findings}</p>
                 </div>
               )}
-              <Button variant="outline" size="sm" className="w-full bg-transparent">
-                View Full Report
-              </Button>
+              <ViewReportButton 
+                testResultId={result.id}
+                patientName={`${result.patient?.first_name} ${result.patient?.last_name}`}
+                testName={result.test?.test_name}
+              />
             </div>
           </CardContent>
         </Card>

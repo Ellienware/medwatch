@@ -17,6 +17,7 @@ import type { Notification } from "@/lib/types/notifications"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { RealtimeService } from "@/lib/realtime/realtime-service"
+import { toast } from "sonner"
 
 export function NotificationsDropdown() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -53,22 +54,27 @@ export function NotificationsDropdown() {
     }
   }, [])
 
- const markAsRead = async (notificationId: string) => {
-  try {
-    const response = await fetch(`/api/notifications/${notificationId}`, { // Remove /read
-      method: "PATCH",
-    })
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      })
 
-    if (response.ok) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n)),
-      )
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n)),
+        )
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+        toast.success("Marked as read")
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "Failed to mark as read")
+      }
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error)
+      toast.error("Failed to mark as read")
     }
-  } catch (error) {
-    console.error("Failed to mark notification as read:", error)
   }
-}
 
   const markAllAsRead = async () => {
     setIsLoading(true)
@@ -80,9 +86,14 @@ export function NotificationsDropdown() {
       if (response.ok) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true, read_at: new Date().toISOString() })))
         setUnreadCount(0)
+        toast.success("All notifications marked as read")
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "Failed to mark all as read")
       }
     } catch (error) {
       console.error("Failed to mark all notifications as read:", error)
+      toast.error("Failed to mark all as read")
     } finally {
       setIsLoading(false)
     }
@@ -91,10 +102,15 @@ export function NotificationsDropdown() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "appointment_reminder":
+      case "appointment_scheduled":
       case "appointment_confirmed":
         return <Calendar className="h-4 w-4 text-blue-500" />
       case "appointment_cancelled":
+      case "appointment_deleted":
         return <X className="h-4 w-4 text-red-500" />
+      case "appointment_updated":
+      case "appointment_rescheduled":
+        return <Calendar className="h-4 w-4 text-orange-500" />
       case "test_result_ready":
         return <TestTube2 className="h-4 w-4 text-purple-500" />
       case "certificate_issued":
@@ -106,6 +122,12 @@ export function NotificationsDropdown() {
         return <CreditCard className="h-4 w-4 text-orange-500" />
       case "system_alert":
         return <AlertTriangle className="h-4 w-4 text-red-500" />
+      case "patient_checked_in":
+        return <CheckCircle2 className="h-4 w-4 text-blue-500" />
+      case "staff_assigned":
+        return <CheckCircle2 className="h-4 w-4 text-green-500" />
+      case "appointment_no_show":
+        return <X className="h-4 w-4 text-yellow-500" />
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />
     }
@@ -169,7 +191,18 @@ export function NotificationsDropdown() {
                 )}
                 asChild
               >
-                <Link href={notification.link || "#"} onClick={() => !notification.read && markAsRead(notification.id)}>
+                <Link 
+                  href={notification.link || "#"} 
+                  onClick={(e) => {
+                    if (!notification.read) {
+                      e.preventDefault()
+                      markAsRead(notification.id)
+                      if (notification.link && notification.link !== "#") {
+                        window.location.href = notification.link
+                      }
+                    }
+                  }}
+                >
                   <div className="flex w-full items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">

@@ -1,3 +1,4 @@
+// lib/auth/actions.ts
 "use server"
 
 import {
@@ -26,8 +27,9 @@ import {
   getUserRepository,
   getClinicRepository,
 } from "@/lib/repositories"
+import { emailService } from "../email/email-service"
 
-import { emailService } from "@/lib/email/email-service"
+
 
 /* --------------------------------------------------------
  * AUTH HELPERS
@@ -59,6 +61,22 @@ export async function getCurrentUser() {
   } catch (error) {
     console.error("Error getting current user:", error)
     return null
+  }
+}
+
+export async function getUserProfile() {
+  try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return { success: false, error: "User not authenticated" }
+    }
+    return { success: true, user }
+  } catch (error) {
+    console.error("Error getting user profile:", error)
+    return { 
+      success: false, 
+      error: "Failed to get user profile" 
+    }
   }
 }
 
@@ -384,3 +402,4 @@ export async function inviteStaffMember(
     message: `Invitation sent to ${email}`,
   }
 }
+

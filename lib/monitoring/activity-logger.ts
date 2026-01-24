@@ -1,4 +1,3 @@
-// lib/monitoring/activity-logger.ts
 import { getCurrentUser } from "@/lib/auth/actions"
 import { getActivityRepository } from "@/lib/repositories"
 import type { ActivityType } from "@/lib/types/database"
@@ -179,11 +178,43 @@ export const activityLogger = {
     )
   },
 
-  settingsUpdated: async (settingsType: string) => {
+  settingsUpdated: async (userId?: string, settingType?: string) => {
     await logActivity(
       "settings_updated",
-      `Updated ${settingsType} settings`,
-      "settings"
+      `Updated ${settingType || "user"} settings`,
+      "settings",
+      userId
+    )
+  },
+
+  // NEW: User-specific activity methods
+  profileUpdated: async (userId: string, changes?: Record<string, any>) => {
+    await logActivity(
+      "settings_updated",
+      `Updated user profile`,
+      "user",
+      userId,
+      changes
+    )
+  },
+
+  passwordChanged: async (userId: string) => {
+    await logActivity(
+      "settings_updated",
+      "Changed password",
+      "user",
+      userId,
+      { action: "password_change" }
+    )
+  },
+
+  avatarUpdated: async (userId: string) => {
+    await logActivity(
+      "settings_updated",
+      "Updated profile picture",
+      "user",
+      userId,
+      { action: "avatar_update" }
     )
   },
 

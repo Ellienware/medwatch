@@ -1,5 +1,5 @@
 /// lib/email/email-service.ts
-import { Resend } from "resend"
+
 import logger from "@/lib/logging/logger"
 
 
@@ -67,6 +67,7 @@ export interface CertificateEmailData {
   clinicName: string
   downloadUrl?: string
   employerName?: string
+  templateName?: string; 
 }
 
 export interface AppointmentReminderEmailData {
@@ -979,8 +980,8 @@ private async sendEmail(options: EmailOptions): Promise<{
             .content { padding: 30px 20px; background-color: #f9f9f9; }
             .alert-box { background-color: #fef3c7; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #f59e0b; }
             .button { display: inline-block; padding: 12px 24px; background-color: #0d9488; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
             .plan-details { background-color: white; padding: 20px; margin: 20px 0; border-radius: 8px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
           </style>
         </head>
         <body>

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { createServerClient } from "@/lib/appwrite/client"
+import { createServerClient } from "@/lib/appwrite/server-client"
 import { APPWRITE_DATABASE_ID, COLLECTIONS } from "@/lib/appwrite/config"
 import { Query } from "appwrite"
 import { ArrowRight } from "lucide-react"

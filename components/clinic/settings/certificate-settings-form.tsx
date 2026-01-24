@@ -1,8 +1,8 @@
-// components/clinic/settings/certificate-settings-form.tsx
 "use client"
 
 import { useState } from "react"
 import { useForm } from "react-hook-form"
+import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
@@ -28,12 +28,10 @@ import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
 import { Slider } from "@/components/ui/slider"
-
 import { updateCertificateSettings } from "@/lib/actions/clinic-actions"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Palette, Layout, Type, Image, Settings } from "lucide-react"
+import { Loader2, Palette, Layout, Type, Image, Settings, ArrowLeft } from "lucide-react"
 import type { Clinic } from "@/lib/types/database"
 import type { CertificateSettings } from "@/lib/types/certificate-settings"
 import { ColorPicker } from "@/components/ui/color-picker"
@@ -91,6 +89,7 @@ interface CertificateSettingsFormProps {
 }
 
 export function CertificateSettingsForm({ clinic }: CertificateSettingsFormProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -178,8 +177,43 @@ export function CertificateSettingsForm({ clinic }: CertificateSettingsFormProps
     }
   }
 
+  // Function to go back
+  const handleGoBack = () => {
+    router.back()
+  }
+
   return (
     <div className="space-y-6">
+      {/* Back Button and Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={handleGoBack}
+            className="h-8 w-8"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Certificate Settings</h1>
+            <p className="text-sm text-muted-foreground">
+              Customize how your medical certificates appear
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleGoBack}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+      </div>
+
       <Tabs defaultValue="design" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="design" className="flex items-center gap-2">
@@ -1075,44 +1109,53 @@ export function CertificateSettingsForm({ clinic }: CertificateSettingsFormProps
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Live Preview Section */}
+            {previewUrl && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Live Preview
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Preview how your certificate will look with current settings
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg p-4 bg-muted/30">
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-[600px] border rounded"
+                      title="Certificate Preview"
+                    />
+                  </div>
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Note: This preview uses sample data. Actual certificates will show patient-specific information.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGoBack}
+                className="gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Certificates
+              </Button>
+              <Button type="submit" disabled={isSubmitting} size="lg">
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Certificate Settings
+              </Button>
+            </div>
           </form>
         </Form>
       </Tabs>
-
-      {/* Live Preview Section */}
-      {previewUrl && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Live Preview
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Preview how your certificate will look with current settings
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg p-4 bg-muted/30">
-              <iframe
-                src={previewUrl}
-                className="w-full h-[600px] border rounded"
-                title="Certificate Preview"
-              />
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground">
-              Note: This preview uses sample data. Actual certificates will show patient-specific information.
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting} size="lg">
-          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Certificate Settings
-        </Button>
-      </div>
     </div>
   )
 }

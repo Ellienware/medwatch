@@ -12,10 +12,10 @@ export default function IssueCertificatePage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div>
+        {/* <div>
           <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">Issue Medical Certificate</h1>
           <p className="text-muted-foreground">Generate fitness-to-work certificate</p>
-        </div>
+        </div> */}
       </div>
 
       <IssueCertificateForm />

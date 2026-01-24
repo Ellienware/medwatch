@@ -149,8 +149,8 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
     ])
   }
 
-  // Create trial subscription - WORKING VERSION
-  async createTrial(clinicId: string, pricingTier: string, branchCount: number): Promise<Subscription> {
+
+  async createTrial(clinicId: string, pricingTier: string, branchCount: number = 1): Promise<Subscription> {
     const trialEnds = new Date()
     trialEnds.setDate(trialEnds.getDate() + 30) // 30-day trial
     
@@ -158,14 +158,16 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
     const metadata = {
       trial_started: new Date().toISOString(),
       selected_plan: pricingTier,
-      branch_count: branchCount,
+      initial_branch_count: branchCount,
+      branches_added_during_trial: 0,
+      trial_type: "single_branch_start",
     }
     
     // Use type assertion to bypass TypeScript checks temporarily
     const subscriptionData = {
       clinic_id: clinicId,
       pricing_tier: pricingTier,
-      total_branches: branchCount,
+      total_branches: branchCount, // Always 1 for trial start
       amount: 0,
       status: "trial",
       trial_started_at: new Date().toISOString(),
@@ -233,8 +235,8 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
     })
   }
 
-  // Convert trial to active subscription
-  async convertTrialToActive(
+  // Convert trial to active subscription WITH ACTUAL BRANCH COUNT
+  async convertTrialToActiveWithActualBranches(
     subscriptionId: string,
     amount: number,
     paystackReference: string,
@@ -250,16 +252,33 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
       throw new Error(`Subscription ${subscriptionId} not found`)
     }
     
+    // Count actual active branches
+    const { BranchRepository } = await import("./branch-repository")
+    const branchRepo = new BranchRepository()
+    const branches = await branchRepo.findByClinicId(subscription.clinic_id, { isActive: true })
+    const totalActiveBranches = branches.length
+    
+    // Calculate final amount based on actual branches
+    let finalAmount = amount
+    if (subscription.pricing_tier === "multi_branch" && totalActiveBranches > 1) {
+      // Recalculate based on actual branches
+      finalAmount = 650000 + ((totalActiveBranches - 1) * 500000)
+    }
+    
     // Prepare metadata update
+    const metadata = subscription.metadata || {}
     const updatedMetadata = {
-      ...subscription.metadata,
+      ...metadata,
       trial_converted_at: now.toISOString(),
       conversion_reference: paystackReference,
+      actual_branches_at_conversion: totalActiveBranches,
+      calculated_amount: finalAmount,
     }
     
     return this.update(subscriptionId, {
       status: "active",
-      amount: amount,
+      amount: finalAmount,
+      total_branches: totalActiveBranches, // Update with actual count
       paystack_reference: paystackReference,
       paystack_subscription_id: paystackSubscriptionId || null,
       payment_method_id: paymentMethodId || null,
@@ -267,7 +286,25 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
       current_period_end: nextBilling.toISOString(),
       next_billing_date: nextBilling.toISOString(),
       metadata: updatedMetadata,
-    } as any) // Use type assertion
+    } as any)
+  }
+
+  // Convert trial to active subscription (updated to use actual branches)
+  async convertTrialToActive(
+    subscriptionId: string,
+    amount: number,
+    paystackReference: string,
+    paystackSubscriptionId?: string,
+    paymentMethodId?: string
+  ): Promise<Subscription> {
+    // Use the new method that counts actual branches
+    return this.convertTrialToActiveWithActualBranches(
+      subscriptionId,
+      amount,
+      paystackReference,
+      paystackSubscriptionId,
+      paymentMethodId
+    )
   }
 
   // Cancel subscription
@@ -278,8 +315,9 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
     }
     
     // Prepare metadata update
+    const metadata = subscription.metadata || {}
     const updatedMetadata = {
-      ...subscription.metadata,
+      ...metadata,
       cancelled_at: new Date().toISOString(),
       cancellation_reason: reason,
     }

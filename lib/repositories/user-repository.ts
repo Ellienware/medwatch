@@ -2,8 +2,13 @@ import { BaseRepository } from "./base-repository"
 import { COLLECTIONS } from "@/lib/appwrite/config"
 import { Query } from "appwrite"
 import type { User as DatabaseUser, UserRole } from "@/lib/types/database"
+import { serverDatabases } from "@/lib/appwrite/server-client"
+import { ID } from "appwrite"
+import { withRetry } from "@/lib/utils/retry"
+import { DatabaseError } from "@/lib/errors"
+import logger from "@/lib/logging/logger"
 
-export type User = DatabaseUser // Use the database type directly
+export type User = DatabaseUser
 
 export class UserRepository extends BaseRepository<User> {
   protected collectionId = COLLECTIONS.USERS
@@ -15,6 +20,7 @@ export class UserRepository extends BaseRepository<User> {
   protected mapToEntity(doc: any): User {
     // Parse permissions from JSON string if it exists
     let permissions: Record<string, any> = {}
+    let settings: Record<string, any> = {}
     
     if (doc.permissions) {
       try {
@@ -28,6 +34,7 @@ export class UserRepository extends BaseRepository<User> {
         permissions = {}
       }
     }
+
 
     // Parse invitation status
     let invitationStatus: User["invitation_status"] = null
@@ -60,10 +67,116 @@ export class UserRepository extends BaseRepository<User> {
       invited_at: doc.invited_at || null,
       invitation_status: invitationStatus,
       created_at: doc.$createdAt,
-      updated_at: doc.$updatedAt,
+      updated_at: doc.$updatedAt || null,
     }
   }
+
+  /**
+   * Override create method to handle object-to-string conversion
+   */
+  async create(data: Partial<User>): Promise<User> {
+    logger.info(`Creating user`, { data: { ...data, auth_user_id: data.auth_user_id } })
+    
+    try {
+      return await withRetry(async () => {
+        const now = new Date().toISOString()
+        const dataForAppwrite: any = { ...data }
+        
+        // Add timestamps
+        if (!dataForAppwrite.created_at) {
+          dataForAppwrite.created_at = now
+        }
+        dataForAppwrite.updated_at = now
+        
+        // Convert objects to JSON strings for Appwrite
+        this.convertObjectsToStrings(dataForAppwrite)
+        
+        logger.debug(`Creating user document`, {
+          dataKeys: Object.keys(dataForAppwrite),
+          hasPermissions: !!dataForAppwrite.permissions,
+          hasSettings: !!dataForAppwrite.settings,
+          permissionsLength: typeof dataForAppwrite.permissions === 'string' ? dataForAppwrite.permissions.length : 'N/A'
+        })
+        
+        const doc = await serverDatabases.createDocument(
+          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          this.collectionId,
+          ID.unique(),
+          dataForAppwrite
+        )
+        
+        return this.mapToEntity(doc)
+      })
+    } catch (error) {
+      logger.error(`Failed to create user`, error, { data: { ...data, auth_user_id: data.auth_user_id } })
+      throw new DatabaseError(`Failed to create user`, error as Error)
+    }
+  }
+
+  /**
+   * Override update method to handle object-to-string conversion
+   */
+  async update(id: string, data: Partial<User>): Promise<User> {
+    logger.info(`Updating user`, { id, data })
+    
+    try {
+      return await withRetry(async () => {
+        const dataToUpdate: any = { ...data }
+        
+        // Add updated_at timestamp
+        dataToUpdate.updated_at = new Date().toISOString()
+        
+        // Convert objects to JSON strings for Appwrite
+        this.convertObjectsToStrings(dataToUpdate)
+        
+        logger.debug(`Updating user document`, {
+          id,
+          dataKeys: Object.keys(dataToUpdate),
+          permissionsType: typeof dataToUpdate.permissions,
+          settingsType: typeof dataToUpdate.settings,
+          permissionsLength: typeof dataToUpdate.permissions === 'string' ? dataToUpdate.permissions.length : 'N/A'
+        })
+        
+        const doc = await serverDatabases.updateDocument(
+          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          this.collectionId,
+          id,
+          dataToUpdate
+        )
+        
+        // Invalidate cache
+        this.invalidateCache(id)
+        return this.mapToEntity(doc)
+      })
+    } catch (error) {
+      logger.error(`Failed to update user`, error, { id, data })
+      throw new DatabaseError(`Failed to update user`, error as Error)
+    }
+  }
+
+  /**
+   * Helper method to convert object fields to JSON strings
+   */
+private convertObjectsToStrings(data: any): void {
+  // Convert permissions object to JSON string
+  if (data.permissions && typeof data.permissions === 'object') {
+    data.permissions = JSON.stringify(data.permissions)
+    logger.debug(`Converted permissions to string`, {
+      length: data.permissions.length,
+      preview: data.permissions.substring(0, 100) + '...'
+    })
+  } else if (!data.permissions) {
+    data.permissions = "{}" // Default empty object
+  }
   
+  if (data.settings !== undefined) {
+    logger.warn(`Found top-level settings field in data. This field should be nested inside permissions. Removing it.`, {
+      settingsType: typeof data.settings,
+      dataKeys: Object.keys(data)
+    })
+    delete data.settings
+  }
+}
 
   async findByEmail(email: string): Promise<User[]> {
     const users = await this.find([
@@ -72,7 +185,6 @@ export class UserRepository extends BaseRepository<User> {
     return users
   }
 
-  // Alternative: findByEmail returns single user
   async findOneByEmail(email: string): Promise<User | null> {
     const users = await this.find([
       Query.equal("email", email),
@@ -81,7 +193,6 @@ export class UserRepository extends BaseRepository<User> {
     return users[0] || null
   }
 
-
   async findByAuthId(authUserId: string): Promise<User | null> {
     const users = await this.find([
       Query.equal("auth_user_id", authUserId),
@@ -89,6 +200,30 @@ export class UserRepository extends BaseRepository<User> {
     ])
     return users[0] || null
   }
+
+async updateUserSettings(userId: string, settings: Record<string, any>) {
+  const user = await this.findById(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  const currentPermissions = user.permissions || {}
+  
+  // Create the permissions object with settings nested inside
+  const updatedPermissions = {
+    ...currentPermissions,
+    settings: {
+      ...((currentPermissions as any)?.settings || {}),
+      ...settings,
+    }
+  }
+  
+  // Only pass permissions to update, not settings separately
+  return this.update(userId, {
+    permissions: updatedPermissions
+    // DO NOT include settings field here
+  })
+}
 
   async findByClinicId(clinicId: string, options?: { role?: UserRole; isActive?: boolean }): Promise<User[]> {
     const queries = [
@@ -168,6 +303,13 @@ export class UserRepository extends BaseRepository<User> {
     const basePermissions = {
       can_view_patients: true,
       can_view_appointments: true,
+      settings: {
+        email_notifications: true,
+        push_notifications: true,
+        two_factor_enabled: false,
+        language: "en",
+        timezone: "UTC",
+      }
     }
 
     switch (role) {
@@ -213,4 +355,3 @@ export class UserRepository extends BaseRepository<User> {
     }
   }
 }
-

@@ -1,4 +1,3 @@
-// app/api/subscriptions/create-trial/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth/actions"
 import { getSubscriptionRepository, getBranchRepository } from "@/lib/repositories"
@@ -13,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, code, email, phone, address, pricingTier, branchCount } = body
+    const { name, code, email, phone, address, pricingTier } = body // Removed branchCount
 
     const subscriptionRepo = getSubscriptionRepository()
     const branchRepo = getBranchRepository()
@@ -28,13 +27,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Validate tier and branches
-    const validation = validateTierAndBranches(pricingTier, 0, branchCount)
+    // Validate tier - always start with 1 branch
+    const validation = validateTierAndBranches(pricingTier, 0, 1)
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    // Create the branch
+    // Create the first branch
     const branch = await branchRepo.create({
       clinic_id: user.clinic_id,
       name,
@@ -45,11 +44,11 @@ export async function POST(request: NextRequest) {
       is_active: true,
     })
 
-    // Create trial subscription
+    // Create trial subscription with 1 branch
     const trialSubscription = await subscriptionRepo.createTrial(
       user.clinic_id,
       pricingTier,
-      branchCount
+      1 // Always start with 1 branch
     )
 
     return NextResponse.json({
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
       branch,
       subscription: trialSubscription,
       trialEndsAt: trialSubscription.trial_ends_at,
-      message: "30-day free trial started successfully",
+      message: "30-day free trial started successfully with 1 branch. You can add more branches anytime during your trial!",
     })
   } catch (error) {
     console.error("Create trial error:", error)

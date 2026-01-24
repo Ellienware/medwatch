@@ -58,10 +58,11 @@ export function validateTierAndBranches(
 ): { valid: boolean; error?: string } {
   const tier = tierId === "single_branch" ? PRICING_TIERS.SINGLE_BRANCH : PRICING_TIERS.MULTI_BRANCH
 
-  if (newTotalBranches < tier.minBranches) {
+  // For trial start, we only check if single branch plan is selected
+  if (tierId === "single_branch" && newTotalBranches > 1) {
     return {
       valid: false,
-      error: `${tier.name} requires at least ${tier.minBranches} branch${tier.minBranches > 1 ? 'es' : ''}.`,
+      error: "Single Branch plan supports maximum 1 branch.",
     }
   }
 
@@ -73,8 +74,6 @@ export function validateTierAndBranches(
   }
 
   return { valid: true }
-
-  
 }
 
 

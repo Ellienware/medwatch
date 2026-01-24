@@ -1,9 +1,37 @@
-import { RecordTestForm } from "@/components/clinic/tests/record-test-form"
+// app/clinic/tests/new/page.tsx
+import { RecordTestForm } from "@/components/clinic/tests/record-test-form" // ✅ Updated path
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { getCurrentUser } from "@/lib/auth/actions"
+import { getAppointmentRepository } from "@/lib/repositories"
+import { getClinicalTestRepository } from "@/lib/repositories"
+import type { Appointment, Patient, ClinicalTest } from "@/lib/types/database"
 
-export default function RecordTestPage() {
+type AppointmentWithPatient = Appointment & { patient?: Patient }
+
+export default async function RecordTestPage() {
+  const user = await getCurrentUser()
+  
+  if (!user?.clinic_id) {
+    return <div>No clinic found</div>
+  }
+
+  // Fetch data on the server
+  const appointmentRepo = getAppointmentRepository()
+  const testRepo = getClinicalTestRepository()
+
+  const [appointments, tests] = await Promise.all([
+    appointmentRepo.findAppointmentsWithPatientInfoBatch(user.clinic_id, { 
+      status: "checked_in" 
+    }) as Promise<AppointmentWithPatient[]>,
+    testRepo.find([
+      JSON.stringify({ method: "equal", attribute: "clinic_id", values: [user.clinic_id] }),
+      JSON.stringify({ method: "equal", attribute: "is_active", values: [true] }),
+      JSON.stringify({ method: "orderAsc", attribute: "test_name" })
+    ]) as Promise<ClinicalTest[]>
+  ])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -14,11 +42,16 @@ export default function RecordTestPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">Record Test Results</h1>
-          <p className="text-muted-foreground">Enter patient test results</p>
+          <p className="text-muted-foreground">Enter multiple test results for a patient</p>
         </div>
       </div>
 
-      <RecordTestForm />
+      {/* ✅ This now uses your new multi-test form */}
+      <RecordTestForm 
+        initialAppointments={appointments}
+        initialTests={tests}
+      />
     </div>
   )
 }
+

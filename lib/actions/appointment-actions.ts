@@ -17,6 +17,7 @@ import type { Appointment, AppointmentStatus } from "@/lib/types/database"
 import { isValidAppointmentStatus } from "@/lib/utils/type-guards"
 import { notificationService } from "@/lib/notifications/notification-service"
 import { emailService } from "@/lib/email/email-service"
+import { Query } from "node-appwrite"
 
 /* -------------------------------------------------------------------------- */
 /* CREATE                                                                      */
@@ -301,6 +302,157 @@ export async function createAppointmentAndNotify(
       success: false,
       appointment: null,
       error: (error as Error).message,
+    }
+  }
+}
+
+export async function getAppointmentsForTestRecording(options?: {
+  date?: string
+  status?: AppointmentStatus
+  limit?: number
+}) {
+  try {
+    const user = await getCurrentUser()
+    
+    if (!user?.clinic_id) {
+      return { 
+        success: false, 
+        appointments: [], 
+        error: "Unauthorized - No clinic access" 
+      }
+    }
+
+    const appointmentRepo = getAppointmentRepository()
+    
+    // Use today's date by default
+    const today = options?.date || new Date().toISOString().split('T')[0]
+    
+    // Fetch appointments with patient info using batch method
+    const appointments = await appointmentRepo.findAppointmentsWithPatientInfoBatch(
+      user.clinic_id,
+      {
+        date: today,
+        status: options?.status || "checked_in",
+        limit: options?.limit || 50
+      }
+    )
+
+    // Format for dropdown display
+    const formattedAppointments = appointments.map((apt) => {
+      const patientName = apt.patient 
+        ? `${apt.patient.first_name} ${apt.patient.last_name}`
+        : `Patient ${apt.patient_id.substring(0, 8)}...`
+      
+      // Format time nicely (remove seconds if present)
+      const time = apt.appointment_time 
+        ? apt.appointment_time.split(':').slice(0, 2).join(':')
+        : "Time not set"
+      
+      // Check if appointment is today
+      const isToday = apt.appointment_date === today
+      const dateLabel = isToday ? "Today" : new Date(apt.appointment_date).toLocaleDateString()
+      
+      // Include additional info
+      const additionalInfo = []
+      if (apt.employer_id) additionalInfo.push("Employer")
+      if (apt.appointment_type) additionalInfo.push(apt.appointment_type)
+      
+      const infoSuffix = additionalInfo.length > 0 
+        ? ` - ${additionalInfo.join(', ')}`
+        : ''
+      
+      return {
+        id: apt.id,
+        display: `${patientName} - ${time}${infoSuffix} (${dateLabel})`,
+        appointment_time: time,
+        appointment_date: apt.appointment_date,
+        patient_id: apt.patient_id,
+        patient_name: patientName,
+        status: apt.status,
+        appointment_type: apt.appointment_type,
+        employer_id: apt.employer_id
+      }
+    })
+
+    return { 
+      success: true, 
+      appointments: formattedAppointments, 
+      error: null 
+    }
+  } catch (error) {
+    console.error("Error fetching appointments:", error)
+    return { 
+      success: false, 
+      appointments: [], 
+      error: error instanceof Error ? error.message : "Failed to fetch appointments" 
+    }
+  }
+}
+
+// Add this to lib/actions/appointment-actions.ts
+export async function getCompletedAppointments() {
+  try {
+    const user = await getCurrentUser()
+    if (!user?.clinic_id) {
+      return { success: false, appointments: [], error: "User not associated with a clinic" }
+    }
+
+    const appointmentRepo = getAppointmentRepository()
+    const patientRepo = getPatientRepository()
+
+    // Use the correct query format for your repository
+    const appointments = await appointmentRepo.find([
+      Query.equal("clinic_id", user.clinic_id),
+      Query.equal("status", "completed"),
+      Query.orderDesc("appointment_date")
+    ])
+    
+    // Enrich with patient details
+    const enrichedAppointments = await Promise.all(
+      appointments.map(async (appointment) => {
+        try {
+          const patient = await patientRepo.findById(appointment.patient_id)
+          return {
+            id: appointment.id,
+            appointment_id: appointment.id,
+            patient_id: appointment.patient_id,
+            patient_name: patient 
+              ? `${patient.first_name} ${patient.last_name}`
+              : "Unknown Patient",
+            appointment_date: appointment.appointment_date,
+            appointment_time: appointment.appointment_time,
+            appointment_type: appointment.appointment_type,
+            completed_at: appointment.completed_at || appointment.updated_at || appointment.created_at,
+            display: `${patient?.first_name || "Patient"} ${patient?.last_name || ""} - ${appointment.appointment_date} ${appointment.appointment_time}`
+          }
+        } catch (error) {
+          console.error("Error fetching patient:", error)
+          return {
+            id: appointment.id,
+            appointment_id: appointment.id,
+            patient_id: appointment.patient_id,
+            patient_name: "Unknown Patient",
+            appointment_date: appointment.appointment_date,
+            appointment_time: appointment.appointment_time,
+            appointment_type: appointment.appointment_type,
+            completed_at: appointment.completed_at || appointment.updated_at || appointment.created_at,
+            display: `Patient - ${appointment.appointment_date} ${appointment.appointment_time}`
+          }
+        }
+      })
+    )
+
+    return { 
+      success: true, 
+      appointments: enrichedAppointments, 
+      error: null 
+    }
+  } catch (error) {
+    console.error("Error fetching completed appointments:", error)
+    return { 
+      success: false, 
+      appointments: [], 
+      error: (error as Error).message 
     }
   }
 }

@@ -1,4 +1,3 @@
-// components/clinic/billing/add-branch-form.tsx - UPDATED
 "use client"
 
 import type React from "react"
@@ -10,11 +9,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Check, Plus, Minus, Calendar, Shield } from "lucide-react"
+import { Loader2, Check, Plus, Minus, Calendar, Shield, Building, CreditCard } from "lucide-react"
 import { formatCurrency } from "@/lib/paystack/config"
-import { PRICING_TIERS, calculateMonthlyPrice, validateTierAndBranches } from "@/lib/pricing/config"
+import { PRICING_TIERS, calculateMonthlyPrice } from "@/lib/pricing/config"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
 
 export function AddBranchForm() {
   const router = useRouter()
@@ -27,6 +28,7 @@ export function AddBranchForm() {
     trialActive: boolean
     daysRemaining?: number
     trialEndsAt?: string
+    subscription?: any
   } | null>(null)
   
   const [formData, setFormData] = useState({
@@ -38,9 +40,9 @@ export function AddBranchForm() {
   })
   
   const [pricingTier, setPricingTier] = useState<"single_branch" | "multi_branch">("single_branch")
-  const [branchCount, setBranchCount] = useState(1)
   const [monthlyPrice, setMonthlyPrice] = useState(650000)
   const [trialEndDate, setTrialEndDate] = useState<string>("")
+  const [currentBranches, setCurrentBranches] = useState(0)
 
   useEffect(() => {
     loadSubscriptionStatus()
@@ -48,9 +50,9 @@ export function AddBranchForm() {
   }, [])
 
   useEffect(() => {
-    const price = calculateMonthlyPrice(pricingTier, branchCount)
+    const price = calculateMonthlyPrice(pricingTier, 1) // Always calculate for 1 branch initially
     setMonthlyPrice(price)
-  }, [pricingTier, branchCount])
+  }, [pricingTier])
 
   const loadSubscriptionStatus = async () => {
     try {
@@ -59,6 +61,13 @@ export function AddBranchForm() {
       const data = await response.json()
       console.log("📥 Subscription status:", data)
       setSubscriptionStatus(data)
+      
+      // Get current branches count
+      const branchesResponse = await fetch("/api/branches")
+      if (branchesResponse.ok) {
+        const branchesData = await branchesResponse.json()
+        setCurrentBranches(branchesData.branches?.length || 0)
+      }
     } catch (error) {
       console.error("Failed to load subscription status:", error)
     } finally {
@@ -85,7 +94,6 @@ export function AddBranchForm() {
     console.log("📝 Form data:", formData)
     console.log("🎯 Subscription status:", subscriptionStatus)
     console.log("💲 Pricing tier:", pricingTier)
-    console.log("🏢 Branch count:", branchCount)
 
     try {
       // Validate form data
@@ -106,19 +114,6 @@ export function AddBranchForm() {
           variant: "destructive",
         })
         return
-      }
-
-      // Only validate for new subscriptions, not for adding to trial
-      if (!subscriptionStatus?.hasTrial) {
-        const validation = validateTierAndBranches(pricingTier, 0, branchCount)
-        if (!validation.valid) {
-          toast({
-            title: "Invalid Selection",
-            description: validation.error,
-            variant: "destructive",
-          })
-          return
-        }
       }
 
       // Check subscription status
@@ -154,7 +149,7 @@ export function AddBranchForm() {
   }
 
   const handleStartFreeTrial = async () => {
-    console.log("🚀 Starting free trial...")
+    console.log("🚀 Starting free trial with 1 branch...")
     
     const response = await fetch("/api/subscriptions/create-trial", {
       method: "POST",
@@ -162,7 +157,6 @@ export function AddBranchForm() {
       body: JSON.stringify({
         ...formData,
         pricingTier,
-        branchCount,
       }),
     })
 
@@ -176,27 +170,26 @@ export function AddBranchForm() {
 
     toast({
       title: "Free Trial Started!",
-      description: `Enjoy 30 days of free access to all features. Your trial ends on ${trialEndDate}.`,
+      description: `Enjoy 30 days of free access to all features with 1 branch. Your trial ends on ${trialEndDate}. Add more branches anytime during your trial.`,
       variant: "default",
     })
 
     // Redirect to dashboard
     router.push("/dashboard")
+    router.refresh()
   }
 
   const handleAddBranchToTrial = async () => {
     console.log("📤 Adding branch to trial...")
-    console.log("📝 Sending data:", {
-      ...formData,
-      is_active: true,
-    })
+    console.log("📝 Sending data:", formData)
     
     const response = await fetch("/api/branches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...formData,
-        is_active: true, // ✅ Explicitly set to true
+        is_active: true,
+        duringTrial: true,
       }),
     })
 
@@ -209,35 +202,32 @@ export function AddBranchForm() {
     }
 
     toast({
-      title: "Branch Added",
-      description: data.message || "Branch added successfully to your trial account",
+      title: "Branch Added to Trial",
+      description: data.message || "Branch added successfully! It's free during your trial. You'll be billed for additional branches after trial ends.",
       variant: "default",
     })
 
     router.push("/dashboard")
+    router.refresh()
   }
 
   const handleAddBranchToExisting = async () => {
     console.log("💰 Adding branch to existing subscription...")
     
-    const response = await fetch("/api/branches/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...formData,
-        pricingTier,
-        branchCount,
-      }),
-    })
-
-    const data = await response.json()
-    console.log("📥 Response:", data)
-
-    if (!response.ok) {
-      throw new Error(data.error || data.message || "Failed to add branch")
+    // Calculate price for the new branch
+    const isMultiBranch = subscriptionStatus?.subscription?.pricing_tier === "multi_branch"
+    const currentBranchCount = subscriptionStatus?.subscription?.total_branches || 1
+    
+    let additionalAmount = 0
+    if (isMultiBranch && currentBranchCount >= 1) {
+      // Additional branches cost R5,000 each
+      additionalAmount = 500000
+    } else if (!isMultiBranch) {
+      // Switching from single to multi-branch
+      additionalAmount = 500000 // First additional branch
     }
-
-    if (data.requiresPayment) {
+    
+    if (additionalAmount > 0) {
       const reference = `ADD-${Date.now()}`
       
       const paymentResponse = await fetch("/api/paystack/initialize", {
@@ -245,14 +235,14 @@ export function AddBranchForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: formData.email,
-          amount: data.additionalAmount,
+          amount: additionalAmount,
           reference,
           metadata: {
             type: "add_branch",
             branch_name: formData.name,
             branch_code: formData.code,
-            pricing_tier: pricingTier,
-            branch_count: branchCount,
+            clinic_id: subscriptionStatus?.subscription?.clinic_id,
+            action: "add_branch_to_subscription",
           },
         }),
       })
@@ -269,12 +259,35 @@ export function AddBranchForm() {
         throw new Error("No payment URL received from Paystack")
       }
     } else {
-      router.push(`/clinic/billing/success?reference=${Date.now()}`)
+      // Create branch without payment (first branch or special case)
+      const response = await fetch("/api/branches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          is_active: true,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to add branch")
+      }
+
+      toast({
+        title: "Branch Added",
+        description: "Branch added successfully to your subscription",
+        variant: "default",
+      })
+
+      router.push("/dashboard")
     }
   }
 
   const handleTrialExpired = async () => {
-    // Redirect to payment to start subscription
+    // Calculate price for the first branch after trial
+    const basePrice = pricingTier === "single_branch" ? 650000 : 650000
     const reference = `POSTTRIAL-${Date.now()}`
 
     const response = await fetch("/api/paystack/initialize", {
@@ -282,14 +295,14 @@ export function AddBranchForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: formData.email,
-        amount: monthlyPrice,
+        amount: basePrice,
         reference,
         metadata: {
           type: "post_trial_subscription",
           pricing_tier: pricingTier,
-          branch_count: branchCount,
           branch_name: formData.name,
           branch_code: formData.code,
+          action: "convert_trial_to_paid",
         },
       }),
     })
@@ -324,6 +337,19 @@ export function AddBranchForm() {
           <AlertDescription className="text-green-800">
             <span className="font-semibold">30-Day Free Trial Active</span> • 
             {subscriptionStatus.daysRemaining ? ` ${subscriptionStatus.daysRemaining} days remaining` : ''}
+            {currentBranches > 0 && ` • ${currentBranches} branch${currentBranches > 1 ? 'es' : ''} active`}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Active Subscription Banner */}
+      {subscriptionStatus?.hasActiveSubscription && subscriptionStatus.subscription && (
+        <Alert className="bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200">
+          <CreditCard className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <span className="font-semibold">Active {subscriptionStatus.subscription.pricing_tier === "single_branch" ? "Single Branch" : "Multi-Branch"} Plan</span> • 
+            {` ${subscriptionStatus.subscription.total_branches || 1} branch${subscriptionStatus.subscription.total_branches > 1 ? 'es' : ''} included`}
+            {` • ${formatCurrency(subscriptionStatus.subscription.amount)}/month`}
           </AlertDescription>
         </Alert>
       )}
@@ -388,18 +414,18 @@ export function AddBranchForm() {
         </div>
       </div>
 
-      {/* Pricing Tier Selection - Only show if no active trial */}
-      {!subscriptionStatus?.trialActive && (
+      {/* Pricing Tier Selection - Only show if no active subscription or trial */}
+      {!subscriptionStatus?.hasActiveSubscription && !subscriptionStatus?.trialActive && (
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Choose Your Plan</h2>
           
           <div className="mb-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
               <Shield className="w-4 h-4" />
-              <span>30-Day Free Trial Included</span>
+              <span>30-Day Free Trial - 1 Branch Included</span>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Both plans include a full-featured 30-day free trial. No payment required to start.
+              Start with 1 branch during your trial. Add more branches anytime - you'll only pay for them after your trial ends.
             </p>
           </div>
           
@@ -429,7 +455,7 @@ export function AddBranchForm() {
                   </div>
                   <div className="mt-2 text-sm text-green-600">
                     <Check className="w-4 h-4 inline mr-1" />
-                    <span className="font-medium">Free for 30 days</span>
+                    <span className="font-medium">1 branch free for 30 days</span>
                   </div>
                   <ul className="mt-3 space-y-2">
                     {PRICING_TIERS.SINGLE_BRANCH.features.map((feature) => (
@@ -453,57 +479,22 @@ export function AddBranchForm() {
                   </Label>
                 </div>
                 <p className="text-muted-foreground mt-1">
-                  For clinics with multiple locations
+                  For clinics planning multiple locations
                 </p>
-                
-                {pricingTier === "multi_branch" && (
-                  <div className="mt-4">
-                    <Label htmlFor="branchCount" className="block mb-2 text-sm font-medium">
-                      How many branches do you need?
-                    </Label>
-                    <div className="flex items-center space-x-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setBranchCount(Math.max(2, branchCount - 1))}
-                        disabled={branchCount <= 2}
-                      >
-                        <Minus className="w-4 h-4" />
-                      </Button>
-                      <div className="text-center min-w-[100px]">
-                        <span className="text-2xl font-semibold">{branchCount}</span>
-                        <p className="text-xs text-muted-foreground">branch{branchCount > 1 ? 'es' : ''}</p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setBranchCount(branchCount + 1)}
-                        disabled={branchCount >= 10}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
 
                 <div className="mt-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-2xl font-bold">
-                        {formatCurrency(calculateMonthlyPrice("multi_branch", branchCount))}
-                      </span>
+                      <span className="text-2xl font-bold">R6,500 + R5,000 per additional branch</span>
                       <span className="text-sm text-muted-foreground ml-2">/month after trial</span>
                     </div>
                   </div>
                   <div className="mt-2 text-sm text-green-600">
                     <Check className="w-4 h-4 inline mr-1" />
-                    <span className="font-medium">Free for 30 days</span>
+                    <span className="font-medium">1 branch free for 30 days</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {branchCount === 1 ? "1 branch" : 
-                     `R6,500 for first branch + R5,000 for each additional (${branchCount} total)`}
+                    Start with 1 branch during trial. Add more anytime - pay R5,000/month for each additional branch after trial ends.
                   </p>
                   <ul className="mt-3 space-y-2">
                     {PRICING_TIERS.MULTI_BRANCH.features.map((feature) => (
@@ -531,7 +522,7 @@ export function AddBranchForm() {
                 <div>
                   <span className="font-semibold text-green-800">30-Day Free Trial Active</span>
                   <p className="text-sm text-green-600">
-                    Full access to all features • Ends on {subscriptionStatus.trialEndsAt ? new Date(subscriptionStatus.trialEndsAt).toLocaleDateString() : trialEndDate}
+                    {currentBranches} branch{currentBranches !== 1 ? 'es' : ''} active • Full access to all features • Ends on {subscriptionStatus.trialEndsAt ? new Date(subscriptionStatus.trialEndsAt).toLocaleDateString() : trialEndDate}
                   </p>
                 </div>
                 <span className="text-xl font-bold text-green-800">FREE</span>
@@ -544,7 +535,7 @@ export function AddBranchForm() {
                 <div>
                   <span className="font-semibold text-blue-800">Active Subscription</span>
                   <p className="text-sm text-blue-600">
-                    You have an active paid subscription
+                    {subscriptionStatus.subscription.total_branches || 1} branch{(subscriptionStatus.subscription.total_branches || 1) > 1 ? 'es' : ''} • {formatCurrency(subscriptionStatus.subscription.amount)}/month
                   </p>
                 </div>
               </div>
@@ -557,43 +548,52 @@ export function AddBranchForm() {
                   <div>
                     <span className="font-semibold text-green-800">30-Day Free Trial</span>
                     <p className="text-sm text-green-600">
-                      Full access to all features • Ends on {trialEndDate}
+                      1 branch included • Full access to all features • Ends on {trialEndDate}
                     </p>
                   </div>
                   <span className="text-xl font-bold text-green-800">FREE</span>
                 </div>
               </div>
               
-              <div className="pt-3 border-t">
+              <Separator />
+              
+              <div className="pt-3">
                 <div className="flex justify-between mb-2">
                   <span className="text-muted-foreground">After trial ends:</span>
                   <span className="font-medium">
                     {pricingTier === "single_branch" ? "Single Branch Plan" : "Multi-Branch Plan"}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="font-semibold">Monthly Cost</span>
                   <span className="text-2xl font-bold">{formatCurrency(monthlyPrice)}</span>
                 </div>
+                {pricingTier === "multi_branch" && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Additional branches: R5,000/month each
+                  </p>
+                )}
               </div>
             </>
           )}
           
-          <div className="pt-3 border-t flex items-center justify-between">
+          <Separator />
+          
+          <div className="pt-3 flex items-center justify-between">
             <div>
               <span className="font-semibold">
-                {subscriptionStatus?.trialActive ? "Add Branch Today" : "Start Today"}
+                {subscriptionStatus?.trialActive ? "Add Branch" : "Start Today"}
               </span>
               <p className="text-sm text-muted-foreground">
                 {subscriptionStatus?.trialActive 
-                  ? "Add a new branch to your trial account" 
+                  ? "Add another branch to your trial account" 
                   : "No payment required for 30 days"}
               </p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-green-600">FREE</div>
               <p className="text-xs text-muted-foreground">
-                {subscriptionStatus?.trialActive ? "for trial period" : "for 30 days"}
+                {subscriptionStatus?.trialActive ? "during trial" : "for 30 days"}
               </p>
             </div>
           </div>
@@ -602,8 +602,9 @@ export function AddBranchForm() {
         {!subscriptionStatus?.trialActive && (
           <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-sm text-blue-800">
-              <span className="font-semibold">How it works:</span> Start your free trial today. 
-              After 30 days, you'll be automatically charged {formatCurrency(monthlyPrice)}/month for your selected plan. 
+              <span className="font-semibold">How it works:</span> Start your free trial today with 1 branch. 
+              Add more branches anytime during your trial. After 30 days, you'll be automatically charged 
+              {pricingTier === "single_branch" ? " R6,500/month" : " R6,500/month for first branch + R5,000/month for each additional branch"}. 
               Cancel anytime before trial ends.
             </p>
           </div>

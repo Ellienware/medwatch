@@ -57,10 +57,10 @@ export async function AppointmentTests({ appointmentId, patientId }: Appointment
               <div key={test.id} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    {testIcons[test.test_id] || <FileText className="h-5 w-5 text-primary" />}
+                    {testIcons[test.test_code] || <FileText className="h-5 w-5 text-primary" />}
                   </div>
                   <div>
-                    <p className="font-medium capitalize">{test.test_id.replace('_', ' ')}</p>
+                    <p className="font-medium capitalize">{test.test_code.replace('_', ' ')}</p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span>Performed by: {test.performed_by?.substring(0, 8) || 'Unknown'}</span>
                       <span>•</span>

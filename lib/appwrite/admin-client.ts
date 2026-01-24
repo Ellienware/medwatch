@@ -1,3 +1,4 @@
+//lib/appwrite/admin-client
 import { Client, Databases, Account, Storage, Users } from "node-appwrite"
 
 export interface AdminAppwriteClient {

@@ -7,6 +7,7 @@ export interface Clinic {
   id: string
   name: string
   registration_number: string | null
+  vat_number : string | null
   email: string
   phone: string | null
   address: string | null
@@ -60,6 +61,7 @@ export interface User {
   invitation_status: "pending" | "sent" | "accepted" | "expired" | null
   created_at: string
   updated_at: string
+  
   
   // Add these optional fields for employers
   company_name?: string | null
@@ -170,8 +172,8 @@ export interface ClinicalTest {
   test_category: string | null
   description: string | null
   price: number
-  parameters: any[]
-  normal_ranges: Record<string, any>
+  parameters: string
+  normal_ranges: string
   requires_equipment: boolean
   estimated_duration_minutes: number | null
   is_active: boolean
@@ -185,10 +187,10 @@ export interface TestResult {
   clinic_id: string
   appointment_id: string
   patient_id: string
-  test_id: string
+  test_code: string
   performed_by: string | null
   performed_at: string
-  results: Record<string, any>
+  results: Record<string, any> | string
   is_normal: boolean | null
   findings: string | null
   recommendations: string | null
@@ -198,6 +200,26 @@ export interface TestResult {
   created_at: string
   updated_at: string
   test_name?: string
+}
+
+export type TemplateLayout = 'single' | 'two_column' | 'compact'
+export type TemplateCategory = 'medical' | 'fitness' | 'employer' | 'legal' | 'custom'
+
+export interface CertificateTemplate {
+  id: string
+  clinic_id: string
+  name: string
+  description: string | null
+  thumbnail_url: string | null
+  category: TemplateCategory
+  settings: Record<string, any>  // CertificateSettings JSON
+  layout: TemplateLayout
+  is_default: boolean
+  is_one_page: boolean
+  sections_included: string[]  // ['patient_info', 'test_results', 'diagnosis', 'restrictions', 'recommendations', 'signature']
+  created_by: string
+  created_at: string
+  updated_at: string
 }
 
 // Core certificate types
@@ -224,6 +246,7 @@ export interface Certificate {
   sent_to_employer: boolean
   sent_to_patient: boolean
   sent_at: string | null
+  template_id: string | null,
   status: "draft" | "issued" | "revoked" | "expired"
   created_at: string
   updated_at: string

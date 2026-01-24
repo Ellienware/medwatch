@@ -84,7 +84,7 @@ export default async function TestResultDetailPage({ params }: TestResultDetailP
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
-                <span className="capitalize">{test.test_id.replace('_', ' ')}</span> Results
+                <span className="capitalize">{test.test_code.replace('_', ' ')}</span> Results
               </h1>
               {test.is_normal !== null && (
                 <Badge variant={test.is_normal ? "default" : "destructive"} className="text-sm">
@@ -180,7 +180,7 @@ export default async function TestResultDetailPage({ params }: TestResultDetailP
               <div className="space-y-3">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Test Type</p>
-                  <p className="font-medium capitalize">{test.test_id.replace('_', ' ')}</p>
+                  <p className="font-medium capitalize">{test.test_code.replace('_', ' ')}</p>
                 </div>
                 
                 <div className="space-y-1">

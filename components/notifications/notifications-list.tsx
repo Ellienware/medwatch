@@ -34,6 +34,9 @@ export function NotificationsList() {
       if (response.ok) {
         const data = await response.json()
         setNotifications(data.notifications)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "Failed to load notifications")
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error)
@@ -56,22 +59,26 @@ export function NotificationsList() {
     }
   }, [])
 
- const markAsRead = async (notificationId: string) => {
-  try {
-    const response = await fetch(`/api/notifications/${notificationId}`, { // Remove /read
-      method: "PATCH",
-    })
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      })
 
-    if (response.ok) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n)),
-      )
-      toast.success("Marked as read")
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n)),
+        )
+        toast.success("Marked as read")
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "Failed to mark as read")
+      }
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error)
+      toast.error("Failed to mark as read")
     }
-  } catch (error) {
-    toast.error("Failed to mark as read")
   }
-}
 
   const markAllAsRead = async () => {
     try {
@@ -82,8 +89,12 @@ export function NotificationsList() {
       if (response.ok) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true, read_at: new Date().toISOString() })))
         toast.success("All notifications marked as read")
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "Failed to mark all as read")
       }
     } catch (error) {
+      console.error("Failed to mark all notifications as read:", error)
       toast.error("Failed to mark all as read")
     }
   }
@@ -91,10 +102,15 @@ export function NotificationsList() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "appointment_reminder":
+      case "appointment_scheduled":
       case "appointment_confirmed":
         return <Calendar className="h-5 w-5 text-blue-500" />
       case "appointment_cancelled":
+      case "appointment_deleted":
         return <X className="h-5 w-5 text-red-500" />
+      case "appointment_updated":
+      case "appointment_rescheduled":
+        return <Calendar className="h-5 w-5 text-orange-500" />
       case "test_result_ready":
         return <TestTube2 className="h-5 w-5 text-purple-500" />
       case "certificate_issued":
@@ -106,6 +122,12 @@ export function NotificationsList() {
         return <CreditCard className="h-5 w-5 text-orange-500" />
       case "system_alert":
         return <AlertTriangle className="h-5 w-5 text-red-500" />
+      case "patient_checked_in":
+        return <CheckCircle2 className="h-5 w-5 text-blue-500" />
+      case "staff_assigned":
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+      case "appointment_no_show":
+        return <X className="h-5 w-5 text-yellow-500" />
       default:
         return <Bell className="h-5 w-5 text-muted-foreground" />
     }
@@ -162,7 +184,9 @@ export function NotificationsList() {
           <CardContent className="flex flex-col items-center justify-center p-12 text-center">
             <Bell className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="text-lg font-semibold">No notifications</h3>
-            <p className="text-sm text-muted-foreground">You're all caught up!</p>
+            <p className="text-sm text-muted-foreground">
+              {activeTab === "unread" ? "No unread notifications" : "You're all caught up!"}
+            </p>
           </CardContent>
         </Card>
       ) : (

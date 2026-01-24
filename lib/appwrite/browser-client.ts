@@ -1,3 +1,4 @@
+//lib/appwrite/browser-client
 import {
   Client as WebClient,
   Databases,

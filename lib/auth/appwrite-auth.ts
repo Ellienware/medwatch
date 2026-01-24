@@ -1,3 +1,4 @@
+//lib/auth/appwrite-auth
 import { serverUsers, serverAccount } from "@/lib/appwrite/server-client"
 import { ID } from "node-appwrite"
 

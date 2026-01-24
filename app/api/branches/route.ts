@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, code, email, phone, address } = body
+    const { name, code, email, phone, address, duringTrial } = body
 
     const branchRepo = getBranchRepository()
     const subscriptionRepo = getSubscriptionRepository()
@@ -60,11 +60,24 @@ export async function POST(request: NextRequest) {
       latitude: null,
       longitude: null,
       operating_hours: {},
-      is_active: true, // ✅ CHANGED: Create as active
+      is_active: true,
     })
 
-    // Check subscription limits
-    if (subscription) {
+    // If this is a trial and duringTrial flag is set, track it in metadata
+    if (subscription?.status === "trial" && duringTrial) {
+      const metadata = subscription.metadata || {}
+      const branchesAddedDuringTrial = (metadata.branches_added_during_trial || 0) + 1
+      
+      await subscriptionRepo.update(subscription.id, {
+        metadata: { // ← FIXED: Pass object directly, not stringified
+          ...metadata,
+          branches_added_during_trial: branchesAddedDuringTrial,
+        },
+      })
+    }
+
+    // Check subscription limits for active subscriptions
+    if (subscription?.status === "active") {
       const activeBranches = await branchRepo.findByClinicId(user.clinic_id, { isActive: true })
       
       // Check if this exceeds subscription limits
@@ -89,7 +102,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       success: true,
       branch: newBranch,
-      message: "Branch created successfully"
+      message: subscription?.status === "trial" 
+        ? "Branch added successfully! It's free during your trial. You'll be billed for additional branches after trial ends."
+        : "Branch created successfully"
     })
   } catch (error) {
     console.error("Add branch error:", error)

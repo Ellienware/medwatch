@@ -51,6 +51,7 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       doctor_registration_number: doc.doctor_registration_number || null,
       doctor_signature_url: doc.doctor_signature_url || null,
       pdf_url: doc.pdf_url || null,
+      template_id: doc.template_id || null,
       test_results: testResults,
       sent_to_employer: doc.sent_to_employer || false,
       sent_to_patient: doc.sent_to_patient || false,
@@ -239,7 +240,7 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       testResults.map(async (testResult) => {
         try {
           const clinicalTestRepo = new ClinicalTestRepository()
-          const test = await clinicalTestRepo.findById(testResult.test_id)
+          const test = await clinicalTestRepo.findById(testResult.test_code)
           return {
             ...testResult,
             test_name: test?.test_name || 'Unknown Test',
@@ -288,5 +289,31 @@ export class CertificateRepository extends BaseRepository<Certificate> {
 
   async updateStatus(certificateId: string, status: Certificate["status"]): Promise<Certificate> {
     return this.update(certificateId, { status })
+  }
+
+    async findByTemplateId(templateId: string): Promise<Certificate[]> {
+    return this.find([
+      Query.equal("template_id", templateId),
+      Query.orderDesc("issue_date"),
+    ])
+  }
+
+  async updateWithTemplate(certificateId: string, templateId: string): Promise<Certificate> {
+    return this.update(certificateId, {
+      template_id: templateId,
+      updated_at: new Date().toISOString()
+    })
+  }
+
+  async getTemplateUsageStats(clinicId: string): Promise<Record<string, number>> {
+    const certificates = await this.findByClinicId(clinicId)
+    const stats: Record<string, number> = {}
+    
+    certificates.forEach(cert => {
+      const templateId = cert.template_id || 'no_template'
+      stats[templateId] = (stats[templateId] || 0) + 1
+    })
+    
+    return stats
   }
 }

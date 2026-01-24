@@ -1,6 +1,5 @@
-// app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { sendPasswordReset, getUserByEmail } from '@/lib/auth/appwrite-auth'
+import { sendPasswordReset } from '@/lib/appwrite/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,42 +13,67 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user exists first
-    const user = await getUserByEmail(email)
-    
-    if (!user) {
-      // Return generic success message for security
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { message: 'If an account exists with this email, you will receive a password reset link' },
-        { status: 200 }
+        { error: 'Invalid email format' },
+        { status: 400 }
       )
     }
 
-    try {
-      // Try to send password reset
-      await sendPasswordReset(email)
+    console.log(`Processing password reset request for: ${email}`)
+
+    // Call the Appwrite password reset function
+    const result = await sendPasswordReset(email)
+
+    if (!result.success) {
+      const errorMsg = result.error?.toLowerCase() || ''
+      
+      // Handle specific errors
+      if (errorMsg.includes('not found') || errorMsg.includes('no user')) {
+        return NextResponse.json(
+          { error: 'No account found with this email address' },
+          { status: 404 }
+        )
+      }
+      
+      if (errorMsg.includes('rate limit') || errorMsg.includes('too many')) {
+        return NextResponse.json(
+          { error: 'Too many reset attempts. Please wait before trying again.' },
+          { status: 429 }
+        )
+      }
+      
+      if (errorMsg.includes('invalid')) {
+        return NextResponse.json(
+          { error: 'Invalid email address' },
+          { status: 400 }
+        )
+      }
       
       return NextResponse.json(
-        { message: 'Password reset email sent successfully' },
-        { status: 200 }
-      )
-    } catch (resetError: any) {
-      console.error('Password reset error:', resetError)
-      
-      // Still return success for security
-      return NextResponse.json(
-        { message: 'If an account exists with this email, you will receive a password reset link' },
-        { status: 200 }
+        { error: result.error || 'Failed to send reset email' },
+        { status: 400 }
       )
     }
+
+    console.log(`Password reset email sent successfully to: ${email}`)
+    
+    return NextResponse.json(
+      { 
+        message: 'Password reset email sent. Please check your inbox.',
+        email: email // Return the email for confirmation display
+      },
+      { status: 200 }
+    )
 
   } catch (error: any) {
-    console.error('Forgot password error:', error)
+    console.error('Forgot password unexpected error:', error)
     
-    // Always return the same message for security
     return NextResponse.json(
-      { message: 'If an account exists with this email, you will receive a password reset link' },
-      { status: 200 }
+      { error: error.message || 'Failed to process request' },
+      { status: 500 }
     )
   }
 }

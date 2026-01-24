@@ -1,4 +1,4 @@
-# MedSurv
+# MedWatch
 ## Medical Surveillance Made Simple
 
 **A Complete Digital Solution for Occupational Health Clinics**
@@ -298,20 +298,20 @@ Employers can:
 
 ### Case Study: HealthFirst Clinic (Johannesburg)
 
-**Before MedSurv:**
+**Before MedWatch:**
 - 30 patients per day maximum
 - 10-15 employer calls daily
 - 2 hours/day on certificate admin
 - Compliance concerns
 
-**After MedSurv (3 months):**
+**After MedWatch (3 months):**
 - 50 patients per day (67% increase)
 - Zero employer calls (portal handles it)
 - 15 minutes/day on certificates
 - Fully POPIA compliant
 - 3 new corporate contracts
 
-**"MedSurv transformed our clinic. We're more professional, more efficient, and more profitable."**
+**"MedWatch transformed our clinic. We're more professional, more efficient, and more profitable."**
 - Dr. Sarah Johnson, Owner
 
 ---

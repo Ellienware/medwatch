@@ -29,7 +29,7 @@ const navigation = [
   { name: "Notifications", href: "/clinic/notifications", icon: Bell },
   { name: "Billing", href: "/clinic/billing", icon: CreditCard },
   { name: "Staff", href: "/clinic/staff", icon: Activity },
-  { name: "Settings", href: "/clinic/settings/certificates", icon: Settings },
+  { name: "Settings", href: "/settings", icon: Settings },
 ]
 
 export function ClinicSidebar() {

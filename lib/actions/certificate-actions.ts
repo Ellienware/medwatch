@@ -1,16 +1,27 @@
 // lib/actions/certificate-actions.ts
 "use server"
 
-import { getCertificateRepository, getAppointmentRepository, getPatientRepository, getClinicRepository, getUserRepository, getEmployerRepository } from "@/lib/repositories"
+import { 
+  getCertificateRepository, 
+  getAppointmentRepository, 
+  getPatientRepository, 
+  getClinicRepository, 
+  getUserRepository, 
+  getEmployerRepository, 
+  getTestResultRepository, 
+  getClinicalTestRepository 
+} from "@/lib/repositories"
+
 import { revalidatePath } from "next/cache"
-import type { Certificate, Appointment, Patient, Clinic, User, CertificateType } from "@/lib/types/database"
+import type { Certificate, Appointment, Patient, Clinic, User, CertificateType, CertificateTemplate, TemplateCategory, TemplateLayout } from "@/lib/types/database"
 import type { CertificateSettings } from "@/lib/types/certificate-settings"
-import { generateCertificatePDF } from "@/lib/pdf/certificate-generator"
+import { serverCertificateGenerator } from "@/lib/pdf/server-certificate-generator"
 import { serverStorageService } from "@/lib/storage/storage-service"
 import { getCurrentUser } from "@/lib/auth/actions"
 import { emailService } from "@/lib/email/email-service"
 import { format } from "date-fns"
 import { Query } from "appwrite"
+import { CertificateTemplateRepository } from "../repositories/template-repository"
 
 // Helper function for certificate type text
 function getCertificateTypeText(type: CertificateType): string {
@@ -22,9 +33,11 @@ function getCertificateTypeText(type: CertificateType): string {
   }
 }
 
+// Main certificate creation function with template support
 export async function createCertificate(data: Partial<Certificate> & {
   sent_to_patient?: boolean
   status?: "draft" | "issued" | "revoked" | "expired"
+  template_id?: string  // NEW: Template selection
 }) {
   try {
     // Get current user to get clinic_id and other user info
@@ -39,6 +52,36 @@ export async function createCertificate(data: Partial<Certificate> & {
     const clinicRepo = getClinicRepository()
     const userRepo = getUserRepository()
     const employerRepo = getEmployerRepository()
+    const testResultRepo = getTestResultRepository()
+    const clinicalTestRepo = getClinicalTestRepository()
+    const templateRepo = new CertificateTemplateRepository()  // NEW
+
+    // ========== DEBUGGING: Log input data ==========
+    console.log('🔍 DEBUG: Creating certificate with data:', {
+      appointment_id: data.appointment_id,
+      certificate_type: data.certificate_type,
+      patient_id: data.patient_id,
+      template_id: data.template_id  // NEW
+    })
+
+    // ========== TEMPLATE HANDLING ==========
+    let selectedTemplate: CertificateTemplate | null = null
+    if (data.template_id) {
+      // Get selected template
+      selectedTemplate = await templateRepo.findById(data.template_id)
+      if (!selectedTemplate || selectedTemplate.clinic_id !== currentUser.clinic_id) {
+        throw new Error("Template not found or unauthorized")
+      }
+    } else {
+      // Get default template for clinic
+      selectedTemplate = await templateRepo.findDefaultTemplate(currentUser.clinic_id)
+    }
+    
+    console.log('🔍 DEBUG: Using template:', {
+      template_id: selectedTemplate?.id,
+      template_name: selectedTemplate?.name,
+      is_one_page: selectedTemplate?.is_one_page
+    })
 
     // Get appointment details
     if (!data.appointment_id) {
@@ -50,17 +93,105 @@ export async function createCertificate(data: Partial<Certificate> & {
       throw new Error("Appointment not found")
     }
 
+    // ========== DEBUGGING: Log appointment ==========
+    console.log('🔍 DEBUG: Found appointment:', {
+      id: appointment.id,
+      patient_id: appointment.patient_id,
+      status: appointment.status
+    })
+
     // Get patient details
     const patient = await patientRepo.findById(appointment.patient_id)
     if (!patient) {
       throw new Error("Patient not found")
     }
 
+    // ========== DEBUGGING: Log patient ==========
+    console.log('🔍 DEBUG: Found patient:', {
+      id: patient.id,
+      name: `${patient.first_name} ${patient.last_name}`
+    })
+
     // Get clinic details
     const clinic = await clinicRepo.findById(currentUser.clinic_id)
     if (!clinic) {
       throw new Error("Clinic not found")
     }
+
+    // ========== DEBUGGING: Log clinic ==========
+    console.log('🔍 DEBUG: Found clinic:', {
+      id: clinic.id,
+      name: clinic.name
+    })
+
+    // Fetch test results for this appointment
+    console.log('🔍 DEBUG: Fetching test results for appointment:', data.appointment_id)
+    const testResults = await testResultRepo.findByAppointmentId(data.appointment_id!)
+    
+    // ========== DEBUGGING: Log raw test results ==========
+    console.log('🔍 DEBUG: Raw test results from database:', {
+      count: testResults.length,
+      results: testResults.map(r => ({
+        id: r.id,
+        test_code: r.test_code,
+        has_results: !!r.results,
+        results_type: typeof r.results
+      }))
+    })
+
+    // Enrich test results with test names
+    const enrichedTestResults = await Promise.all(
+      testResults.map(async (testResult) => {
+        let testName = 'Unknown Test'
+        
+        if (testResult.test_code) {
+          try {
+            const test = await clinicalTestRepo.findByTestCode(testResult.test_code, currentUser.clinic_id!)
+            testName = test?.test_name || 'Unknown Test'
+          } catch (error) {
+            console.error('Error fetching test name:', error)
+          }
+        }
+        
+        // Parse results if they're strings
+        let parsedResults = {}
+        if (testResult.results) {
+          try {
+            parsedResults = typeof testResult.results === 'string' 
+              ? JSON.parse(testResult.results || '{}')
+              : testResult.results
+          } catch (error) {
+            console.error('Error parsing test results:', error)
+            parsedResults = {}
+          }
+        }
+        
+        const enrichedResult = {
+          ...testResult,
+          test_name: testName,
+          results: parsedResults
+        }
+        
+        // ========== DEBUGGING: Log enriched result ==========
+        console.log('🔍 DEBUG: Enriched test result:', {
+          test_code: testResult.test_code,
+          test_name: enrichedResult.test_name,
+          results_count: Object.keys(parsedResults).length
+        })
+        
+        return enrichedResult
+      })
+    )
+
+    // ========== DEBUGGING: Log final enriched results ==========
+    console.log('🔍 DEBUG: Final enriched test results:', {
+      count: enrichedTestResults.length,
+      results: enrichedTestResults.map(r => ({
+        test_name: r.test_name,
+        test_code: r.test_code,
+        results: r.results
+      }))
+    })
 
     // Get doctor details
     let doctor: User | null = null
@@ -107,12 +238,13 @@ export async function createCertificate(data: Partial<Certificate> & {
     const validFrom = data.valid_from ? format(new Date(data.valid_from), "yyyy-MM-dd") : null
     const validUntil = data.valid_until ? format(new Date(data.valid_until), "yyyy-MM-dd") : null
 
-    // Create certificate with all required fields
+    // Create certificate with template_id
     const certificateData: Partial<Certificate> = {
       ...data,
       clinic_id: currentUser.clinic_id,
       patient_id: appointment.patient_id,
       appointment_id: data.appointment_id!,
+      template_id: selectedTemplate?.id || null,  // NEW: Include template reference
       issue_date: issueDate,
       valid_from: validFrom,
       valid_until: validUntil,
@@ -123,14 +255,24 @@ export async function createCertificate(data: Partial<Certificate> & {
       sent_to_patient: false,
       sent_at: null,
       status: "issued",
-      test_results: []
+      test_results: enrichedTestResults 
     }
 
     const certificate = await certificateRepo.create(certificateData)
 
+    // ========== DEBUGGING: Log created certificate ==========
+    console.log('🔍 DEBUG: Certificate created:', {
+      id: certificate.id,
+      certificate_number: certificate.certificate_number,
+      template_id: certificate.template_id,
+      test_results_count: certificate.test_results?.length || 0
+    })
+
     try {
-      // Get certificate settings
-      const certificateSettings = (clinic.settings?.certificate_settings as CertificateSettings) || undefined
+      // Use template settings if available, otherwise clinic settings
+      const certificateSettings = selectedTemplate?.settings as CertificateSettings || 
+                                 (clinic.settings?.certificate_settings as CertificateSettings) || 
+                                 undefined
 
       // Create certificate object for PDF generation with all required fields
       const certificateForPDF: Certificate = {
@@ -151,6 +293,7 @@ export async function createCertificate(data: Partial<Certificate> & {
         doctor_registration_number: certificate.doctor_registration_number || null,
         doctor_signature_url: certificate.doctor_signature_url || null,
         pdf_url: certificate.pdf_url || null,
+        template_id: certificate.template_id || null,  // NEW
         sent_to_employer: certificate.sent_to_employer!,
         sent_to_patient: certificate.sent_to_patient!,
         sent_at: certificate.sent_at || null,
@@ -160,22 +303,43 @@ export async function createCertificate(data: Partial<Certificate> & {
         test_results: certificate.test_results || []
       }
 
-      // Generate PDF
-      const pdfBytes = await generateCertificatePDF(
-        certificateForPDF,
+      // ========== DEBUGGING: Log PDF generation data ==========
+      console.log('🔍 DEBUG: Generating PDF with:', {
+        certificate_number: certificateForPDF.certificate_number,
+        template_name: selectedTemplate?.name,
+        template_is_one_page: selectedTemplate?.is_one_page,
+        test_results_count: enrichedTestResults.length,
+        certificate_settings: !!certificateSettings
+      })
+
+      // ========== KEY FIX: Use SERVER generator with template support ==========
+      // Generate PDF using SERVER generator with template
+      const pdfBuffer = await serverCertificateGenerator.generateCertificate({
+        certificate: certificateForPDF,
         patient,
         clinic,
-        doctorData,
-        certificateSettings
-      )
+        doctor: doctorData,
+        branch: undefined,
+        settings: certificateSettings,
+        template: selectedTemplate || undefined,  // NEW: Pass template
+        testResults: enrichedTestResults
+      })
+
+      console.log('✅ DEBUG: PDF generated successfully, buffer size:', pdfBuffer.length)
 
       // Upload PDF to storage
       const fileName = `certificate_${certificate.certificate_number}_${Date.now()}.pdf`
-      const file = new File([pdfBytes], fileName, { type: "application/pdf" })
-      
+
+      // Convert to Uint8Array
+      const pdfUint8Array = new Uint8Array(pdfBuffer)
+      const file = new File([pdfUint8Array], fileName, { type: "application/pdf" })
+
+      console.log('🔍 DEBUG: Uploading PDF to storage...')
       const uploadedFile = await serverStorageService.uploadFile(file, {
         prefix: "CERTIFICATES" as const
       })
+
+      console.log('✅ DEBUG: PDF uploaded successfully:', uploadedFile.fileUrl)
 
       // Update certificate with PDF URL
       const updatedCertificate = await certificateRepo.update(certificate.id, {
@@ -211,6 +375,7 @@ export async function createCertificate(data: Partial<Certificate> & {
             doctorName: certificate.doctor_name!,
             clinicName: clinic.name,
             downloadUrl: uploadedFile.fileUrl,
+            templateName: selectedTemplate?.name,  // NEW: Include template name
           })
 
           if (emailResult.success) {
@@ -252,6 +417,7 @@ export async function createCertificate(data: Partial<Certificate> & {
               clinicName: clinic.name,
               downloadUrl: uploadedFile.fileUrl,
               employerName: employer.company_name,
+              templateName: selectedTemplate?.name,  // NEW: Include template name
             })
 
             if (emailResult.success) {
@@ -267,29 +433,38 @@ export async function createCertificate(data: Partial<Certificate> & {
         }
       }
 
-      // Prepare success message
-      let message = "Certificate created successfully"
+      // Prepare success message with template info
+      let message = `Certificate created successfully using ${selectedTemplate?.name || 'default'} template.`
       if (emailsSent.patient && emailsSent.employer) {
-        message += ". Emails sent to patient and employer."
+        message += " Emails sent to patient and employer."
       } else if (emailsSent.patient) {
-        message += ". Email sent to patient."
+        message += " Email sent to patient."
       } else if (emailsSent.employer) {
-        message += ". Email sent to employer."
+        message += " Email sent to employer."
       } else if (patient.email || (patient.employer_id && patient.employer_id !== 'none')) {
-        message += ". Could not send emails."
+        message += " Could not send emails."
       }
 
       revalidatePath("/clinic/certificates")
+      
+      console.log('✅ DEBUG: Certificate creation complete!', {
+        success: true,
+        certificate_number: updatedCertificate.certificate_number,
+        template_used: selectedTemplate?.name,
+        test_results_included: enrichedTestResults.length
+      })
+      
       return { 
         success: true, 
         certificate: updatedCertificate, 
         error: null,
         message: message,
-        emailsSent: emailsSent
+        emailsSent: emailsSent,
+        templateUsed: selectedTemplate?.name  // NEW: Return template info
       }
 
     } catch (pdfError) {
-      console.error("Error generating PDF:", pdfError)
+      console.error("❌ DEBUG: Error generating PDF:", pdfError)
       
       revalidatePath("/clinic/certificates")
       return { 
@@ -297,17 +472,19 @@ export async function createCertificate(data: Partial<Certificate> & {
         certificate, 
         error: "Certificate created but PDF generation failed",
         message: "Certificate created successfully, but PDF could not be generated.",
-        emailsSent: { patient: false, employer: false }
+        emailsSent: { patient: false, employer: false },
+        templateUsed: selectedTemplate?.name
       }
     }
   } catch (error) {
-    console.error("Error creating certificate:", error)
+    console.error("❌ DEBUG: Error creating certificate:", error)
     return { 
       success: false, 
       certificate: null, 
       error: error instanceof Error ? error.message : "Failed to create certificate",
       message: null,
-      emailsSent: { patient: false, employer: false }
+      emailsSent: { patient: false, employer: false },
+      templateUsed: null
     }
   }
 }
@@ -323,12 +500,24 @@ export async function sendCertificateEmail(certificateId: string) {
     const patientRepo = getPatientRepository()
     const clinicRepo = getClinicRepository()
     const employerRepo = getEmployerRepository()
+    const templateRepo = new CertificateTemplateRepository()  // NEW
 
     // Get certificate
     const certificate = await certificateRepo.findById(certificateId)
 
     if (!certificate || certificate.clinic_id !== user.clinic_id) {
       throw new Error("Certificate not found or unauthorized")
+    }
+
+    // Get template info
+    let templateName: string | null = null
+    if (certificate.template_id) {
+      try {
+        const template = await templateRepo.findById(certificate.template_id)
+        templateName = template?.name || null
+      } catch (error) {
+        console.error("Error fetching template:", error)
+      }
     }
 
     // Get patient details
@@ -354,46 +543,93 @@ export async function sendCertificateEmail(certificateId: string) {
     }
     let errors: string[] = []
 
-    // Send email to patient
-    if (patient.email) {
-      try {
-        const certificateTypeText = getCertificateTypeText(certificate.certificate_type)
 
-        const emailResult = await emailService.sendCertificateEmail(patient.email, {
-          patientName: `${patient.first_name} ${patient.last_name}`,
-          certificateNumber: certificate.certificate_number,
-          certificateType: certificateTypeText,
-          issueDate: new Date(certificate.issue_date).toLocaleDateString('en-ZA', {
+// Send email to patient
+if (patient.email) {
+  try {
+    const certificateTypeText = getCertificateTypeText(certificate.certificate_type)
+
+    const emailResult = await emailService.sendCertificateEmail(patient.email, {
+      patientName: `${patient.first_name} ${patient.last_name}`,
+      certificateNumber: certificate.certificate_number,
+      certificateType: certificateTypeText,
+      issueDate: new Date(certificate.issue_date).toLocaleDateString('en-ZA', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }),
+      expiryDate: certificate.valid_until ? 
+        new Date(certificate.valid_until).toLocaleDateString('en-ZA', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        }) : undefined,
+      doctorName: certificate.doctor_name,
+      clinicName: clinic.name,
+      downloadUrl: certificate.pdf_url,
+      templateName: templateName || undefined, // Use templateName variable (already defined above)
+    })
+
+    if (emailResult.success) {
+      emailsSent.patient = true
+      await certificateRepo.update(certificate.id, {
+        sent_to_patient: true,
+        sent_at: new Date().toISOString()
+      })
+    } else {
+      errors.push(`Failed to send to patient: ${emailResult.error}`)
+    }
+  } catch (error) {
+    errors.push(`Failed to send to patient: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+} else {
+  errors.push("Patient has no email address")
+}
+
+// Send email to employer
+if (patient.employer_id && patient.employer_id !== 'none') {
+  try {
+    const employer = await employerRepo.findById(patient.employer_id)
+    
+    if (employer && employer.email && (employer.auto_receive_certificates || employer.portal_enabled)) {
+      const certificateTypeText = getCertificateTypeText(certificate.certificate_type)
+
+      const emailResult = await emailService.sendCertificateEmail(employer.email, {
+        patientName: `${patient.first_name} ${patient.last_name}`,
+        certificateNumber: certificate.certificate_number,
+        certificateType: certificateTypeText,
+        issueDate: new Date(certificate.issue_date).toLocaleDateString('en-ZA', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        }),
+        expiryDate: certificate.valid_until ? 
+          new Date(certificate.valid_until).toLocaleDateString('en-ZA', {
             day: 'numeric',
             month: 'long',
             year: 'numeric'
-          }),
-          expiryDate: certificate.valid_until ? 
-            new Date(certificate.valid_until).toLocaleDateString('en-ZA', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric'
-            }) : undefined,
-          doctorName: certificate.doctor_name,
-          clinicName: clinic.name,
-          downloadUrl: certificate.pdf_url,
-        })
+          }) : undefined,
+        doctorName: certificate.doctor_name,
+        clinicName: clinic.name,
+        downloadUrl: certificate.pdf_url,
+        employerName: employer.company_name,
+        templateName: templateName || undefined, // Use templateName variable
+      })
 
-        if (emailResult.success) {
-          emailsSent.patient = true
-          await certificateRepo.update(certificate.id, {
-            sent_to_patient: true,
-            sent_at: new Date().toISOString()
-          })
-        } else {
-          errors.push(`Failed to send to patient: ${emailResult.error}`)
-        }
-      } catch (error) {
-        errors.push(`Failed to send to patient: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (emailResult.success) {
+        emailsSent.employer = true
+        await certificateRepo.update(certificate.id, {
+          sent_to_employer: true,
+          sent_at: new Date().toISOString()
+        })
+      } else {
+        errors.push(`Failed to send to employer: ${emailResult.error}`)
       }
-    } else {
-      errors.push("Patient has no email address")
     }
+  } catch (error) {
+    errors.push(`Failed to send to employer: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
 
     // Send email to employer
     if (patient.employer_id && patient.employer_id !== 'none') {
@@ -422,6 +658,7 @@ export async function sendCertificateEmail(certificateId: string) {
             clinicName: clinic.name,
             downloadUrl: certificate.pdf_url,
             employerName: employer.company_name,
+            templateName: templateName || undefined,  // NEW
           })
 
           if (emailResult.success) {
@@ -452,7 +689,8 @@ export async function sendCertificateEmail(certificateId: string) {
       certificate: await certificateRepo.findById(certificateId),
       error: errors.length > 0 ? errors.join('; ') : null,
       message,
-      emailsSent
+      emailsSent,
+      templateUsed: templateName  // NEW
     }
   } catch (error) {
     console.error("Error sending certificate email:", error)
@@ -461,7 +699,8 @@ export async function sendCertificateEmail(certificateId: string) {
       certificate: null, 
       error: error instanceof Error ? error.message : "Failed to send certificate email",
       message: null,
-      emailsSent: { patient: false, employer: false }
+      emailsSent: { patient: false, employer: false },
+      templateUsed: null
     }
   }
 }
@@ -555,6 +794,7 @@ export async function getCompletedAppointments() {
   }
 }
 
+// Update certificate with template support
 export async function updateCertificateAction(data: {
   id: string
   certificate_type: "fit_to_work" | "unfit_to_work" | "fit_with_restrictions"
@@ -564,6 +804,7 @@ export async function updateCertificateAction(data: {
   valid_from?: string
   valid_until?: string
   test_results?: any[]
+  template_id?: string  // NEW: Optionally update template
 }) {
   try {
     const user = await getCurrentUser()
@@ -574,6 +815,9 @@ export async function updateCertificateAction(data: {
     const certificateRepo = getCertificateRepository()
     const patientRepo = getPatientRepository()
     const clinicRepo = getClinicRepository()
+    const testResultRepo = getTestResultRepository()
+    const clinicalTestRepo = getClinicalTestRepository()
+    const templateRepo = new CertificateTemplateRepository()  // NEW
 
     // Get existing certificate
     const existingCertificate = await certificateRepo.findById(data.id)
@@ -584,6 +828,18 @@ export async function updateCertificateAction(data: {
     // Verify access
     if (existingCertificate.clinic_id !== user.clinic_id) {
       return { success: false, error: "Unauthorized access" }
+    }
+
+    // Get template if specified
+    let selectedTemplate: CertificateTemplate | null = null
+    if (data.template_id) {
+      selectedTemplate = await templateRepo.findById(data.template_id)
+      if (!selectedTemplate || selectedTemplate.clinic_id !== user.clinic_id) {
+        return { success: false, error: "Template not found or unauthorized" }
+      }
+    } else if (existingCertificate.template_id) {
+      // Keep existing template
+      selectedTemplate = await templateRepo.findById(existingCertificate.template_id)
     }
 
     // Prepare update data
@@ -597,6 +853,11 @@ export async function updateCertificateAction(data: {
       updated_at: new Date().toISOString(),
     }
 
+    // Include template_id if provided
+    if (data.template_id !== undefined) {
+      updateData.template_id = data.template_id || null
+    }
+
     // Format dates if provided
     if (data.valid_from) {
       updateData.valid_from = format(new Date(data.valid_from), "yyyy-MM-dd")
@@ -608,7 +869,7 @@ export async function updateCertificateAction(data: {
     // Update certificate
     const updatedCertificate = await certificateRepo.update(data.id, updateData)
 
-    // Regenerate PDF with updated data
+    // Regenerate PDF with updated data and template
     try {
       const [patient, clinic] = await Promise.all([
         patientRepo.findById(updatedCertificate.patient_id),
@@ -618,6 +879,45 @@ export async function updateCertificateAction(data: {
       if (!patient || !clinic) {
         throw new Error("Patient or clinic not found")
       }
+
+      // Get test results for this certificate
+      console.log('🔍 DEBUG: Fetching test results for certificate:', updatedCertificate.appointment_id)
+      const testResults = await testResultRepo.findByAppointmentId(updatedCertificate.appointment_id!)
+      
+      // Enrich test results with test names
+      const enrichedTestResults = await Promise.all(
+        testResults.map(async (testResult) => {
+          let testName = 'Unknown Test'
+          
+          if (testResult.test_code) {
+            try {
+              const test = await clinicalTestRepo.findByTestCode(testResult.test_code, user.clinic_id!)
+              testName = test?.test_name || 'Unknown Test'
+            } catch (error) {
+              console.error('Error fetching test name:', error)
+            }
+          }
+          
+          // Parse results if they're strings
+          let parsedResults = {}
+          if (testResult.results) {
+            try {
+              parsedResults = typeof testResult.results === 'string' 
+                ? JSON.parse(testResult.results || '{}')
+                : testResult.results
+            } catch (error) {
+              console.error('Error parsing test results:', error)
+              parsedResults = {}
+            }
+          }
+          
+          return {
+            ...testResult,
+            test_name: testName,
+            results: parsedResults
+          }
+        })
+      )
 
       // Create a complete User object with all required fields
       const doctorData: User = {
@@ -645,21 +945,37 @@ export async function updateCertificateAction(data: {
         invitation_status: null
       }
 
-      // Get certificate settings
-      const certificateSettings = clinic.settings?.certificate_settings as CertificateSettings | undefined
+      // Use template settings if available, otherwise clinic settings
+      const certificateSettings = selectedTemplate?.settings as CertificateSettings || 
+                                 (clinic.settings?.certificate_settings as CertificateSettings) || 
+                                 undefined
 
-      // Regenerate PDF
-      const pdfBytes = await generateCertificatePDF(
-        updatedCertificate,
+      // Create certificate object for PDF generation
+      const certificateForPDF: Certificate = {
+        ...updatedCertificate,
+        test_results: enrichedTestResults
+      }
+
+      // Regenerate PDF using serverCertificateGenerator with template
+      const pdfBuffer = await serverCertificateGenerator.generateCertificate({
+        certificate: certificateForPDF,
         patient,
         clinic,
-        doctorData,
-        certificateSettings
-      )
+        doctor: doctorData,
+        branch: undefined,
+        settings: certificateSettings,
+        template: selectedTemplate || undefined,  // NEW: Pass template
+        testResults: enrichedTestResults
+      })
+
+      console.log('✅ DEBUG: PDF regenerated successfully, buffer size:', pdfBuffer.length)
 
       // Upload updated PDF to storage
       const fileName = `certificate_${updatedCertificate.certificate_number}_${Date.now()}_updated.pdf`
-      const file = new File([pdfBytes], fileName, { type: "application/pdf" })
+      
+      // Convert to Uint8Array and create File
+      const pdfUint8Array = new Uint8Array(pdfBuffer)
+      const file = new File([pdfUint8Array], fileName, { type: "application/pdf" })
       
       const uploadedFile = await serverStorageService.uploadFile(file, {
         prefix: "CERTIFICATES" as const
@@ -673,7 +989,8 @@ export async function updateCertificateAction(data: {
       return { 
         success: true, 
         certificate: finalCertificate, 
-        error: null 
+        error: null,
+        templateUsed: selectedTemplate?.name  // NEW: Return template info
       }
 
     } catch (pdfError) {
@@ -681,7 +998,8 @@ export async function updateCertificateAction(data: {
       return { 
         success: true, 
         certificate: updatedCertificate, 
-        error: "Certificate updated but PDF regeneration failed" 
+        error: "Certificate updated but PDF regeneration failed",
+        templateUsed: selectedTemplate?.name
       }
     }
 
@@ -690,7 +1008,8 @@ export async function updateCertificateAction(data: {
     return { 
       success: false, 
       certificate: null, 
-      error: (error instanceof Error ? error.message : "Failed to update certificate") 
+      error: (error instanceof Error ? error.message : "Failed to update certificate"),
+      templateUsed: null
     }
   }
 }
@@ -704,6 +1023,7 @@ export async function updateCertificate(data: {
   recommendations?: string
   valid_from?: string
   valid_until?: string
+  template_id?: string  // NEW
 }) {
   return updateCertificateAction(data)
 }
@@ -722,7 +1042,31 @@ export async function getCertificateById(id: string) {
       return { success: false, certificate: null, error: "Certificate not found or unauthorized" }
     }
 
-    return { success: true, certificate, error: null }
+    // Get template info if available
+    let templateInfo = null
+    if (certificate.template_id) {
+      try {
+        const templateRepo = new CertificateTemplateRepository()
+        const template = await templateRepo.findById(certificate.template_id)
+        if (template) {
+          templateInfo = {
+            id: template.id,
+            name: template.name,
+            is_one_page: template.is_one_page,
+            layout: template.layout
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching template info:", error)
+      }
+    }
+
+    return { 
+      success: true, 
+      certificate, 
+      error: null,
+      templateInfo  // NEW: Include template info
+    }
   } catch (error) {
     console.error("Error fetching certificate:", error)
     return { success: false, certificate: null, error: (error as Error).message }
@@ -780,7 +1124,8 @@ export async function resendCertificateEmails(certificateId: string) {
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Failed to resend emails",
-      emailsSent: { patient: false, employer: false }
+      emailsSent: { patient: false, employer: false },
+      templateUsed: null
     }
   }
 }
@@ -812,5 +1157,126 @@ export async function deleteCertificate(id: string) {
   } catch (error) {
     console.error("Error deleting certificate:", error)
     return { success: false, error: (error as Error).message }
+  }
+}
+
+// NEW: Get available templates for current clinic
+export async function getCertificateTemplates(category?: string) {
+  try {
+    const user = await getCurrentUser()
+    if (!user?.clinic_id) {
+      return { success: false, templates: [], error: "User not associated with a clinic" }
+    }
+
+    const templateRepo = new CertificateTemplateRepository()
+    let templates: CertificateTemplate[] = []
+
+    if (category) {
+      templates = await templateRepo.findByClinicId(user.clinic_id, category as any)
+    } else {
+      templates = await templateRepo.findByClinicId(user.clinic_id)
+    }
+
+    return { 
+      success: true, 
+      templates, 
+      error: null 
+    }
+  } catch (error) {
+    console.error("Error fetching certificate templates:", error)
+    return { 
+      success: false, 
+      templates: [], 
+      error: (error as Error).message 
+    }
+  }
+}
+
+// NEW: Create a new certificate template
+export async function createCertificateTemplate(data: {
+  name: string;
+  description?: string;
+  category?: TemplateCategory; // CHANGE THIS
+  layout?: TemplateLayout; // CHANGE THIS
+  is_one_page?: boolean;
+  sections_included?: string[];
+  settings?: CertificateSettings;
+}) {
+  try {
+    const user = await getCurrentUser()
+    if (!user?.clinic_id) {
+      throw new Error("User is not associated with a clinic")
+    }
+
+    const templateRepo = new CertificateTemplateRepository()
+    
+    const template = await templateRepo.create({
+      clinic_id: user.clinic_id,
+      name: data.name,
+      description: data.description || null,
+      category: data.category || 'medical',
+      layout: data.layout || 'single',
+      is_one_page: data.is_one_page || false,
+      sections_included: data.sections_included || ["patient_info", "test_results", "diagnosis", "restrictions", "recommendations", "signature"],
+      settings: data.settings || {},
+      is_default: false,
+      created_by: user.id
+    })
+
+    revalidatePath("/clinic/settings/certificate-templates")
+    return { 
+      success: true, 
+      template, 
+      error: null 
+    }
+  } catch (error) {
+    console.error("Error creating certificate template:", error)
+    return { 
+      success: false, 
+      template: null, 
+      error: (error instanceof Error ? error.message : "Failed to create template") 
+    }
+  }
+}
+
+// NEW: Regenerate certificate PDF with different template
+export async function regenerateCertificateWithTemplate(certificateId: string, templateId: string) {
+  try {
+    const user = await getCurrentUser()
+    if (!user?.clinic_id) {
+      throw new Error("User is not associated with a clinic")
+    }
+
+    const certificateRepo = getCertificateRepository()
+    const certificate = await certificateRepo.findById(certificateId)
+
+    if (!certificate || certificate.clinic_id !== user.clinic_id) {
+      throw new Error("Certificate not found or unauthorized")
+    }
+
+    // Update certificate with new template
+    const result = await updateCertificateAction({
+      id: certificateId,
+      certificate_type: certificate.certificate_type,
+      diagnosis: certificate.diagnosis || undefined,
+      restrictions: certificate.restrictions || undefined,
+      recommendations: certificate.recommendations || undefined,
+      valid_from: certificate.valid_from || undefined,
+      valid_until: certificate.valid_until || undefined,
+      template_id: templateId
+    })
+
+    revalidatePath("/clinic/certificates")
+    revalidatePath(`/clinic/certificates/${certificateId}`)
+
+    return result
+  } catch (error) {
+    console.error("Error regenerating certificate with template:", error)
+    return { 
+      success: false, 
+      certificate: null, 
+      error: (error as Error).message,
+      templateUsed: null
+    }
   }
 }

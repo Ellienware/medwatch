@@ -21,6 +21,7 @@ export const COLLECTIONS = {
   PAYMENTS: "payments",
   PAYMENT_METHODS: "payment_methods",
   ACTIVITIES: "activities",
+  CERTIFICATE_TEMPLATES: "certificate_templates",
 }
 
 // Storage bucket ID - single bucket for all file types

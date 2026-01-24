@@ -266,41 +266,6 @@ export default function ChangePlanPage() {
                 For clinics with multiple locations
               </p>
               
-              {/* Branch Count Selector - Only for multi-branch */}
-              {selectedTier === "multi_branch" && (
-                <div className="mt-4">
-                  <Label htmlFor="branchCount" className="block mb-2 text-sm font-medium">
-                    How many branches do you need?
-                  </Label>
-                  <div className="flex items-center space-x-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setBranchCount(Math.max(2, branchCount - 1))}
-                      disabled={branchCount <= 2}
-                    >
-                      -
-                    </Button>
-                    <div className="text-center min-w-[100px]">
-                      <span className="text-2xl font-semibold">{branchCount}</span>
-                      <p className="text-xs text-muted-foreground">branch{branchCount > 1 ? 'es' : ''}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setBranchCount(branchCount + 1)}
-                      disabled={branchCount >= 10}
-                    >
-                      +
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Minimum 2 branches for Multi-Branch plan
-                  </p>
-                </div>
-              )}
 
               <div className="mt-3">
                 <div className="flex items-center justify-between">

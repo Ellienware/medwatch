@@ -43,6 +43,7 @@ export class ClinicRepository extends BaseRepository<Clinic> {
       id: doc.$id,
       name: doc.name,
       registration_number: doc.registration_number || null,
+      vat_number: doc.vat_number || null,
       email: doc.email,
       phone: doc.phone || null,
       address: doc.address || null,

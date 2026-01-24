@@ -1,4 +1,3 @@
-// lib/repositories/employer-repository.ts
 import { BaseRepository } from "./base-repository"
 import { COLLECTIONS } from "@/lib/appwrite/config"
 import { Query } from "appwrite"

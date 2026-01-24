@@ -59,12 +59,11 @@ export class NotificationService {
     )
   }
 
-
   async createAppointmentScheduled(userId: string, clinicId: string, appointmentId: string) {
     return this.createNotification(
       userId,
       clinicId,
-      "appointment_confirmed", // Changed from "appointment_scheduled" to match your type
+      "appointment_scheduled",
       "Appointment Scheduled",
       "Your appointment has been scheduled successfully",
       {
@@ -75,11 +74,131 @@ export class NotificationService {
     )
   }
 
+  async createAppointmentConfirmed(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_confirmed",
+      "Appointment Confirmed",
+      "Your appointment has been confirmed",
+      {
+        priority: "medium",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createAppointmentUpdated(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_updated",
+      "Appointment Updated",
+      "Your appointment has been updated",
+      {
+        priority: "medium",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createAppointmentCancelled(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_cancelled",
+      "Appointment Cancelled",
+      "Your appointment has been cancelled",
+      {
+        priority: "high",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createAppointmentRescheduled(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_rescheduled",
+      "Appointment Rescheduled",
+      "Your appointment has been rescheduled",
+      {
+        priority: "medium",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createAppointmentNoShow(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_no_show",
+      "Appointment No Show",
+      "Patient did not show up for appointment",
+      {
+        priority: "high",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createAppointmentDeleted(userId: string, clinicId: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "appointment_deleted",
+      "Appointment Deleted",
+      "An appointment has been deleted",
+      {
+        priority: "high",
+        link: `/clinic/appointments`,
+        data: { appointmentId }
+      }
+    )
+  }
+
+  async createPatientCheckedIn(userId: string, clinicId: string, patientName: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "patient_checked_in",
+      "Patient Checked In",
+      `${patientName} has checked in for their appointment`,
+      {
+        priority: "medium",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { patientName, appointmentId }
+      }
+    )
+  }
+
+  async createStaffAssigned(userId: string, clinicId: string, staffName: string, appointmentId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "staff_assigned",
+      "Staff Assigned",
+      `${staffName} has been assigned to an appointment`,
+      {
+        priority: "medium",
+        link: `/clinic/appointments/${appointmentId}`,
+        data: { staffName, appointmentId }
+      }
+    )
+  }
+
   async createAppointmentCompleted(userId: string, clinicId: string, appointmentId: string) {
     return this.createNotification(
       userId,
       clinicId,
-      "appointment_confirmed", // Using existing type since you don't have "appointment_completed"
+      "appointment_confirmed",
       "Appointment Completed",
       "Your appointment has been completed",
       {
@@ -138,10 +257,66 @@ export class NotificationService {
     )
   }
 
+  async notifyPaymentReceived(userId: string, clinicId: string, amount: number, invoiceNumber: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "payment_received",
+      "Payment Received",
+      `Payment of $${amount.toFixed(2)} received for invoice ${invoiceNumber}`,
+      {
+        priority: "medium",
+        link: `/clinic/billing`,
+      },
+    )
+  }
+
   async notifySystemAlert(userId: string, clinicId: string, title: string, message: string) {
     return this.createNotification(userId, clinicId, "system_alert", title, message, {
       priority: "urgent",
     })
+  }
+
+  async createStaffInvitation(userId: string, clinicId: string, clinicName: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "staff_invitation",
+      "Staff Invitation",
+      `You've been invited to join ${clinicName}`,
+      {
+        priority: "high",
+        link: `/clinic/invitations`,
+      }
+    )
+  }
+
+  async createEmployerInvitation(userId: string, clinicId: string, companyName: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "employer_invitation",
+      "Employer Invitation",
+      `You've been invited to register your company ${companyName}`,
+      {
+        priority: "high",
+        link: `/employer/invitations`,
+      }
+    )
+  }
+
+  async createPasswordReset(userId: string, clinicId: string) {
+    return this.createNotification(
+      userId,
+      clinicId,
+      "password_reset",
+      "Password Reset Request",
+      "A password reset has been requested for your account",
+      {
+        priority: "high",
+        link: `/auth/reset-password`,
+      }
+    )
   }
 
   async markAsRead(notificationId: string) {

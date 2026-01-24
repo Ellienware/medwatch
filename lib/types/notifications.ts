@@ -1,25 +1,4 @@
 // lib/types/database.ts (or wherever NotificationType is defined)
-export type NotificationType =
-  | "appointment_reminder"
-  | "appointment_confirmed"
-  | "appointment_cancelled"
-  | "appointment_updated"
-  | "appointment_rescheduled"
-  | "appointment_deleted"
-  | "appointment_no_show"
-  | "patient_checked_in"
-  | "staff_assigned"
-  | "test_result_ready"
-  | "certificate_issued"
-  | "certificate_sent"
-  | "payment_received"
-  | "payment_due"
-  | "system_alert"
-  | "task_assigned"
-  | "message_received"
-
-export type NotificationPriority = "low" | "medium" | "high" | "urgent"
-
 export interface Notification {
   id: string
   clinic_id: string
@@ -35,3 +14,25 @@ export interface Notification {
   created_at: string
   expires_at?: string | null
 }
+
+export type NotificationType =
+  | "appointment_scheduled"
+  | "appointment_confirmed"
+  | "appointment_updated"        // ADD THIS
+  | "appointment_cancelled"      // ADD THIS
+  | "appointment_rescheduled"
+  | "payment_received"    // ADD THIS
+  | "appointment_reminder"
+  | "test_result_ready"
+  | "certificate_issued"
+  | "payment_due"
+  | "system_alert"
+  | "staff_invitation"
+  | "employer_invitation"
+  | "password_reset"
+  | "patient_checked_in"         // ADD THIS
+  | "staff_assigned"             // ADD THIS
+  | "appointment_no_show"        // ADD THIS
+  | "appointment_deleted"        // ADD THIS
+
+export type NotificationPriority = "low" | "medium" | "high" | "urgent"
