@@ -1,3 +1,4 @@
+//clinic/settings/certificates
 import { getCurrentUser } from "@/lib/auth/session"
 import { ClinicRepository } from "@/lib/repositories"
 import { redirect } from "next/navigation"

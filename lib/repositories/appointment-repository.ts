@@ -25,31 +25,31 @@ export class AppointmentRepository extends BaseRepository<Appointment> {
       branch_id: doc.branch_id,
       patient_id: doc.patient_id,
 
-      employer_id: doc.employer_id ?? undefined,
+      employer_id: doc.employer_id ?? null,
 
       appointment_date: doc.appointment_date,
       appointment_time: doc.appointment_time,
       appointment_type: doc.appointment_type,
-      reason: doc.reason ?? undefined,
+      reason: doc.reason ?? null,
 
       status: doc.status as AppointmentStatus,
 
-      checked_in_at: doc.checked_in_at ?? undefined,
-      checked_in_by: doc.checked_in_by ?? undefined,
+      checked_in_at: doc.checked_in_at ?? null,
+      checked_in_by: doc.checked_in_by ?? null,
 
-      nurse_assigned_id: doc.nurse_assigned_id ?? undefined,
-      nurse_started_at: doc.nurse_started_at ?? undefined,
-      nurse_completed_at: doc.nurse_completed_at ?? undefined,
+      nurse_assigned_id: doc.nurse_assigned_id ?? null,
+      nurse_started_at: doc.nurse_started_at ?? null,
+      nurse_completed_at: doc.nurse_completed_at ?? null,
 
-      doctor_assigned_id: doc.doctor_assigned_id ?? undefined,
-      doctor_started_at: doc.doctor_started_at ?? undefined,
-      doctor_completed_at: doc.doctor_completed_at ?? undefined,
+      doctor_assigned_id: doc.doctor_assigned_id ?? null,
+      doctor_started_at: doc.doctor_started_at ?? null,
+      doctor_completed_at: doc.doctor_completed_at ?? null,
 
-      completed_at: doc.completed_at ?? undefined,
+      completed_at: doc.completed_at ?? null,
 
-      reception_notes: doc.reception_notes ?? undefined,
-      nurse_notes: doc.nurse_notes ?? undefined,
-      doctor_notes: doc.doctor_notes ?? undefined,
+      reception_notes: doc.reception_notes ?? null,
+      nurse_notes: doc.nurse_notes ?? null,
+      doctor_notes: doc.doctor_notes ?? null,
 
       created_by: doc.created_by,
       created_at: doc.$createdAt,
@@ -140,51 +140,52 @@ export class AppointmentRepository extends BaseRepository<Appointment> {
   /* -------------------------------------------------------------------------- */
 
   async updateAppointmentDetails(
-    id: string,
-    data: Partial<Appointment>
-  ): Promise<Appointment> {
-    const allowedFields: (keyof Appointment)[] = [
-      "appointment_date",
-      "appointment_time",
-      "appointment_type",
-      "reason",
-      "status",
-      "reception_notes",
-      "nurse_notes",
-      "doctor_notes",
-      "branch_id",
-      "nurse_assigned_id",
-      "doctor_assigned_id",
-      "checked_in_at",
-      "checked_in_by",
-      "nurse_started_at",
-      "nurse_completed_at",
-      "doctor_started_at",
-      "doctor_completed_at",
-      "completed_at",
-      "employer_id",
-    ]
+  id: string,
+  data: Partial<Appointment>
+): Promise<Appointment> {
+  const allowedFields: (keyof Appointment)[] = [
+    "appointment_date",
+    "appointment_time",
+    "appointment_type",
+    "reason",
+    "status",
+    "reception_notes",
+    "nurse_notes",
+    "doctor_notes",
+    "branch_id",
+    "nurse_assigned_id",
+    "doctor_assigned_id",
+    "checked_in_at",
+    "checked_in_by",
+    "nurse_started_at",
+    "nurse_completed_at",
+    "doctor_started_at",
+    "doctor_completed_at",
+    "completed_at",
+    "employer_id",
+  ]
 
-    const updateData: Partial<Appointment> = {}
+  const updateData: Record<string, any> = {} // ✅ Use Record<string, any> instead of Partial<Appointment>
 
-    for (const key of allowedFields) {
-      if (!(key in data)) continue
+  for (const key of allowedFields) {
+    if (!(key in data)) continue
 
-      if (key === "status") {
-        if (isValidAppointmentStatus(data.status)) {
-          updateData.status = data.status
-        }
-        continue
+    if (key === "status") {
+      if (isValidAppointmentStatus(data.status)) {
+        updateData[key] = data.status
       }
-
-      const value = data[key]
-      if (value !== undefined && value !== null) {
-        updateData[key] = value
-      }
+      continue
     }
 
-    return this.update(id, updateData)
+    const value = data[key]
+    if (value !== undefined && value !== null) {
+      updateData[key] = value
+    }
   }
+
+  // ✅ FIX: Cast updateData to Partial<Appointment> when passing to update method
+  return this.update(id, updateData as Partial<Appointment>)
+}
 
   async updateStatus(
     id: string,
@@ -271,6 +272,7 @@ export class AppointmentRepository extends BaseRepository<Appointment> {
     ])
   }
 
+
   /* -------------------------------------------------------------------------- */
   /* BATCH WITH PATIENT                                                         */
   /* -------------------------------------------------------------------------- */
@@ -317,4 +319,14 @@ export class AppointmentRepository extends BaseRepository<Appointment> {
       patient: patientMap.get(apt.patient_id),
     }))
   }
+
+  async findReadyForAssessment(clinicId: string): Promise<Appointment[]> {
+  return this.find([
+    Query.equal("clinic_id", clinicId),
+    Query.equal("status", "tests_completed"), // Or whatever status indicates ready for assessment
+    Query.orderAsc("appointment_date")
+  ])
 }
+}
+
+

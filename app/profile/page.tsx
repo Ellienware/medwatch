@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import ProfilePageClient from "./profile-client"
 import { getCurrentUserProfileWithEmployerData } from "@/lib/actions/user-actions"
 import { redirect } from "next/navigation"

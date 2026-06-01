@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // app/clinic/billing/page.tsx
 import { Suspense } from "react"
 import { CreditCard, TrendingUp } from "lucide-react"

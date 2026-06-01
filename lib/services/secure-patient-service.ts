@@ -1,14 +1,9 @@
-/**
- * Client-side service for secure patient operations
- * Calls Appwrite Functions instead of direct database access
- */
-
 import { getCurrentUser } from "@/lib/auth/actions"
-
-const FUNCTION_ENDPOINT = process.env.NEXT_PUBLIC_SECURE_PATIENT_FUNCTION_ENDPOINT!
+import { AppwriteFunctionsService } from "@/lib/appwrite/functions"
+import { FUNCTIONS } from "@/lib/appwrite/config"
 
 interface SecureOperationParams {
-  action: "create" | "read" | "update" | "delete" | "list"
+  action: "create" | "read" | "update" | "delete" | "list" | "findDuplicates"
   patientId?: string
   data?: any
   filters?: any
@@ -18,46 +13,51 @@ interface SecureOperationParams {
  * Execute secure patient operation via Appwrite Function
  */
 async function executeSecureOperation(params: SecureOperationParams): Promise<any> {
-  const user = await getCurrentUser()
+  try {
+    const user = await getCurrentUser()
 
-  if (!user) {
-    throw new Error("User not authenticated")
+    if (!user) {
+      throw new Error("User not authenticated")
+    }
+
+    // Validate function configuration
+    if (!FUNCTIONS.SECURE_PATIENT) {
+      throw new Error("Secure patient function ID is not configured. Check your environment variables.")
+    }
+
+    // Validate user has clinic
+    if (!user.clinic_id) {
+      throw new Error("User is not assigned to a clinic")
+    }
+
+    const payload = {
+      ...params,
+      userId: user.auth_user_id,
+      userEmail: user.email,
+      userRole: user.role,
+      clinicId: user.clinic_id,
+    }
+
+    console.log(`Calling secure patient function: ${params.action}`, {
+      userId: user.auth_user_id,
+      clinicId: user.clinic_id,
+      hasPatientId: !!params.patientId
+    })
+
+    const result = await AppwriteFunctionsService.securePatientOperation(
+      params.action,
+      payload
+    )
+
+    if (!result.success) {
+      throw new Error(result.error || "Operation failed")
+    }
+
+    return result.data
+  } catch (error: any) {
+    console.error("Secure patient operation failed:", error)
+    throw error
   }
-
-  const payload = {
-    ...params,
-    userId: user.id,
-    userEmail: user.email,
-    userRole: user.role,
-    clinicId: user.clinic_id!,
-  }
-
-  const response = await fetch(FUNCTION_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // Add Appwrite session for authentication
-      "X-Appwrite-Session": await getSessionToken(),
-    },
-    body: JSON.stringify(payload),
-  })
-
-  const result = await response.json()
-
-  if (!result.success) {
-    throw new Error(result.error || "Operation failed")
-  }
-
-  return result.data
-}
-
-// Helper to get session token
-async function getSessionToken(): Promise<string> {
-  // Implementation depends on your auth setup
-  // This should return the current Appwrite session JWT
-  const session = await fetch("/api/auth/session")
-  const data = await session.json()
-  return data.sessionToken
 }
 
 /**
@@ -112,6 +112,16 @@ export const securePatientService = {
     return executeSecureOperation({
       action: "list",
       filters,
+    })
+  },
+
+  /**
+   * Find potential duplicate patients
+   */
+  async findDuplicates(searchCriteria: any) {
+    return executeSecureOperation({
+      action: "findDuplicates",
+      data: searchCriteria,
     })
   },
 }

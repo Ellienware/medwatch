@@ -1,6 +1,6 @@
 // app/clinic/appointments/[id]/page.tsx
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calendar, Clock, User, Building, Stethoscope, FileText, Activity, Printer, Mail, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, User, Building, Stethoscope, FileText, Activity, Printer, Mail, Phone, MapPin, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import { getAppointmentWithPatientInfo, updateAppointmentStatus } from "@/lib/actions/appointment-actions"
 import { getCurrentUser } from "@/lib/auth/actions"
@@ -333,25 +333,34 @@ export default async function AppointmentDetailPage({ params }: AppointmentDetai
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start" variant="outline" asChild>
+              {/* Show Start Assessment button for doctors when tests are complete */}
+              {(appointment.status === "with_doctor" || appointment.status === "tests_in_progress") && (
+                <Button className="w-full justify-start" asChild>
+                  <Link href={`/clinic/assessments/start?appointment=${appointment.id}`}>
+                    <ClipboardList className="mr-2 h-4 w-4" />
+                    Start Clinical Assessment
+                  </Link>
+                </Button>
+              )}
+              <Button className="w-full justify-start bg-transparent" variant="outline" asChild>
                 <Link href={`/clinic/tests/record?appointment=${appointment.id}`}>
                   <FileText className="mr-2 h-4 w-4" />
                   Record Test Results
                 </Link>
               </Button>
-              <Button className="w-full justify-start" variant="outline" asChild>
+              <Button className="w-full justify-start bg-transparent" variant="outline" asChild>
                 <Link href={`/clinic/patients/${appointment.patient_id}`}>
                   <User className="mr-2 h-4 w-4" />
                   View Patient Profile
                 </Link>
               </Button>
-              <Button className="w-full justify-start" variant="outline" asChild>
+              <Button className="w-full justify-start bg-transparent" variant="outline" asChild>
                 <Link href={`/clinic/appointments/${appointment.id}/edit`}>
                   <Calendar className="mr-2 h-4 w-4" />
                   Edit Appointment
                 </Link>
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start bg-transparent" variant="outline">
                 <Mail className="mr-2 h-4 w-4" />
                 Send Reminder
               </Button>

@@ -16,11 +16,13 @@ import {
   Activity,
   Bell,
   BarChart3,
+  ClipboardList,
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/clinic", icon: LayoutDashboard },
   { name: "Appointments", href: "/clinic/appointments", icon: Calendar },
+  { name: "Assessments", href: "/clinic/assessments", icon: ClipboardList },
   { name: "Patients", href: "/clinic/patients", icon: Users },
   { name: "Tests & Results", href: "/clinic/tests", icon: TestTube2 },
   { name: "Certificates", href: "/clinic/certificates", icon: FileText },

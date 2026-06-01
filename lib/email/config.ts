@@ -1,6 +1,6 @@
 // Email configuration
 export const EMAIL_CONFIG = {
-   FROM_EMAIL: process.env.EMAIL_FROM || "nelisatest@gmail.com", // Brevo's shared domain
+   FROM_EMAIL: process.env.EMAIL_FROM || "nelisatest@gmail.com", 
   FROM_NAME: process.env.EMAIL_FROM_NAME || "MedWatch",
   SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || "support@medwatch.com",
 }

@@ -30,12 +30,20 @@ export async function GET() {
 
         return {
           ...apt,
-          patient, // 👈 THIS IS THE CRITICAL LINE
+          patient,
         }
       })
     )
+    const sanitizedAppointments = appointmentsWithPatients.map(apt => ({
+      ...apt,
+      patient: apt.patient ? {
+        id: apt.patient.id,
+        first_name: apt.patient.first_name,
+        last_name: apt.patient.last_name,
+      } : null
+    }))
 
-    return NextResponse.json(appointmentsWithPatients)
+    return NextResponse.json(sanitizedAppointments)
   } catch (error) {
     console.error("Error fetching today's appointments:", error)
     return NextResponse.json(
@@ -44,5 +52,3 @@ export async function GET() {
     )
   }
 }
-
-

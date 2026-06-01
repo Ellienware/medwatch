@@ -178,18 +178,20 @@ export async function encryptFields<T extends Record<string, any>>(
   const result: Record<string, any> = { ...data }
 
   for (const field of fieldsToEncrypt) {
+    // Use string conversion for indexing
+    const fieldName = String(field)
     const value = data[field]
 
     if (value !== null && value !== undefined && value !== "") {
       const encrypted = await encrypt(String(value))
 
       // Store encrypted data with _enc suffix
-      result[`${String(field)}_enc`] = encrypted.ciphertext
-      result[`${String(field)}_iv`] = encrypted.iv
-      result[`${String(field)}_tag`] = encrypted.tag
+      result[`${fieldName}_enc`] = encrypted.ciphertext
+      result[`${fieldName}_iv`] = encrypted.iv
+      result[`${fieldName}_tag`] = encrypted.tag
 
       // Remove plaintext field
-      delete result[field]
+      delete result[fieldName]
     }
   }
 
@@ -214,9 +216,18 @@ export async function decryptFields<T extends Record<string, any>>(
     const ivField = `${field}_iv`
     const tagField = `${field}_tag`
 
-    if (data[encField] && data[ivField] && data[tagField]) {
+    // Use type assertions to access the fields safely
+    const ciphertext = data[encField as keyof T]
+    const iv = data[ivField as keyof T]
+    const tag = data[tagField as keyof T]
+
+    if (ciphertext && iv && tag) {
       try {
-        const decrypted = await decrypt(data[encField], data[ivField], data[tagField])
+        const decrypted = await decrypt(
+          String(ciphertext), 
+          String(iv), 
+          String(tag)
+        )
         result[field] = decrypted
       } catch (error) {
         console.error(`[v0] Failed to decrypt field ${field}:`, error)
@@ -231,6 +242,28 @@ export async function decryptFields<T extends Record<string, any>>(
   }
 
   return result
+}
+
+/**
+ * Type-safe version of encryptFields that preserves the original type structure
+ */
+export async function encryptFieldsTyped<T extends Record<string, any>>(
+  data: T,
+  fieldsToEncrypt: (keyof T)[],
+): Promise<T & Record<`${string}_enc` | `${string}_iv` | `${string}_tag`, string>> {
+  const encrypted = await encryptFields(data, fieldsToEncrypt)
+  return encrypted as T & Record<`${string}_enc` | `${string}_iv` | `${string}_tag`, string>
+}
+
+/**
+ * Type-safe version of decryptFields that returns the original structure
+ */
+export async function decryptFieldsTyped<T extends Record<string, any>>(
+  data: T,
+  fieldsToDecrypt: string[],
+): Promise<Omit<T, `${string}_enc` | `${string}_iv` | `${string}_tag`>> {
+  const decrypted = await decryptFields(data, fieldsToDecrypt)
+  return decrypted as Omit<T, `${string}_enc` | `${string}_iv` | `${string}_tag`>
 }
 
 /**
@@ -255,5 +288,35 @@ export function validateEncryptionConfig(): boolean {
   } catch (error) {
     console.error("[v0] Encryption configuration validation failed:", error)
     return false
+  }
+}
+
+/**
+ * Helper function to check if an object has encrypted fields
+ */
+export function hasEncryptedFields<T extends Record<string, any>>(
+  data: T, 
+  fieldName: string
+): boolean {
+  const encField = `${fieldName}_enc`
+  const ivField = `${fieldName}_iv`
+  const tagField = `${fieldName}_tag`
+  
+  return !!(data[encField as keyof T] && data[ivField as keyof T] && data[tagField as keyof T])
+}
+
+/**
+ * Encrypt a single field and return the encrypted metadata
+ */
+export async function encryptField(fieldName: string, value: string): Promise<{
+  fieldName: string
+  ciphertext: string
+  iv: string
+  tag: string
+}> {
+  const encrypted = await encrypt(value)
+  return {
+    fieldName,
+    ...encrypted
   }
 }

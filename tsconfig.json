@@ -34,7 +34,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "function/secure-test-result-operations/src/index.ts", "function/secure-patient-operations/src/index.ts"  ],
   "exclude": [
     "node_modules"
   ]

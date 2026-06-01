@@ -1,4 +1,3 @@
-// lib/repositories/certificate-repository.ts
 import { BaseRepository } from "./base-repository"
 import { COLLECTIONS } from "@/lib/appwrite/config"
 import { Query } from "appwrite"
@@ -33,6 +32,19 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       }
     }
 
+    // Parse settings override if exists
+    let settingsOverride = null
+    if (doc.settings_override) {
+      try {
+        settingsOverride = typeof doc.settings_override === 'string' 
+          ? JSON.parse(doc.settings_override)
+          : doc.settings_override
+      } catch (error) {
+        console.error('Error parsing settings override:', error)
+        settingsOverride = null
+      }
+    }
+
     return {
       id: doc.$id,
       clinic_id: doc.clinic_id,
@@ -51,23 +63,40 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       doctor_registration_number: doc.doctor_registration_number || null,
       doctor_signature_url: doc.doctor_signature_url || null,
       pdf_url: doc.pdf_url || null,
-      template_id: doc.template_id || null,
       test_results: testResults,
       sent_to_employer: doc.sent_to_employer || false,
       sent_to_patient: doc.sent_to_patient || false,
       sent_at: doc.sent_at || null,
       status: doc.status || "draft",
-      created_at: doc.$createdAt,
-      updated_at: doc.$updatedAt,
+      exam_date: doc.exam_date || doc.issue_date || null,
+      medical_type: doc.medical_type || "general",
+      fitness_status: doc.fitness_status || this.mapFitnessStatus(doc.certificate_type),
+      // created_at: doc.$createdAt,
+      // updated_at: doc.$updatedAt,
+      settings_override: settingsOverride,
+      template_type: doc.template_type || "fitness"
     }
   }
 
+  private mapFitnessStatus(certificateType: CertificateType): string {
+    const statusMap: Record<CertificateType, string> = {
+      "fit_to_work": "fit",
+      "fit_with_restrictions": "fit_with_restrictions",
+      "unfit_to_work": "unfit"
+    }
+    return statusMap[certificateType] || "pending"
+  }
+
   async create(data: Partial<Certificate>): Promise<Certificate> {
-    // Stringify test results if they exist
+    // Stringify complex objects
     const processedData: any = { ...data }
     
     if (processedData.test_results && Array.isArray(processedData.test_results)) {
       processedData.test_results = JSON.stringify(processedData.test_results)
+    }
+    
+    if (processedData.settings_override) {
+      processedData.settings_override = JSON.stringify(processedData.settings_override)
     }
     
     // Set defaults
@@ -75,6 +104,10 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       sent_to_employer: false,
       sent_to_patient: false,
       status: "draft",
+      exam_date: data.issue_date || new Date().toISOString(),
+      medical_type: "general",
+      fitness_status: this.mapFitnessStatus(data.certificate_type || "fit_to_work"),
+      template_type: "fitness"
     }
     
     // Apply defaults for missing fields
@@ -88,11 +121,15 @@ export class CertificateRepository extends BaseRepository<Certificate> {
   }
 
   async update(id: string, data: Partial<Certificate>): Promise<Certificate> {
-    // Stringify test results if they exist
+    // Stringify complex objects
     const processedData: any = { ...data }
     
     if (processedData.test_results && Array.isArray(processedData.test_results)) {
       processedData.test_results = JSON.stringify(processedData.test_results)
+    }
+    
+    if (processedData.settings_override) {
+      processedData.settings_override = JSON.stringify(processedData.settings_override)
     }
     
     return super.update(id, processedData)
@@ -170,19 +207,24 @@ export class CertificateRepository extends BaseRepository<Certificate> {
   }
 
   async generateCertificateNumber(clinicId: string): Promise<string> {
-    // Generate a more readable format
     const today = new Date()
     const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
     
-    // Count certificates for this clinic in current year
+    // Count certificates for this clinic in current month
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString()
+    
     const count = await this.count([
       Query.equal("clinic_id", clinicId),
-      Query.startsWith("certificate_number", `${year}`),
+      Query.greaterThanEqual("issue_date", startOfMonth),
+      Query.lessThanEqual("issue_date", endOfMonth),
     ])
 
-    // Format: YEAR-CLINIC-000001
-    const sequentialNumber = String(count + 1).padStart(6, "0")
-    return `${year}-${clinicId.slice(0, 4).toUpperCase()}-${sequentialNumber}`
+    // Format: YEAR-MONTH-CLINIC-XXXXX
+    const clinicCode = clinicId.slice(0, 4).toUpperCase()
+    const sequentialNumber = String(count + 1).padStart(5, "0")
+    return `${year}${month}-${clinicCode}-${sequentialNumber}`
   }
 
   async countByType(
@@ -231,39 +273,52 @@ export class CertificateRepository extends BaseRepository<Certificate> {
       throw new Error("Certificate not found")
     }
 
-    // Get test results
-    const testResultRepo = new TestResultRepository()
-    const testResults = await testResultRepo.findByAppointmentId(certificate.appointment_id)
+    // Get test results in parallel with other data
+    const [testResults, patient, clinic] = await Promise.all([
+      (async () => {
+        const testResultRepo = new TestResultRepository()
+        const results = await testResultRepo.findByAppointmentId(certificate.appointment_id)
+        
+        // Enrich test results with test names
+        const enrichedResults = await Promise.all(
+          results.map(async (testResult) => {
+            try {
+              const clinicalTestRepo = new ClinicalTestRepository()
+              const test = await clinicalTestRepo.findById(testResult.test_id)
+              return {
+                ...testResult,
+                test_name: test?.test_name || 'Unknown Test',
+              }
+            } catch (error) {
+              console.error("Error fetching test name:", error)
+              return {
+                ...testResult,
+                test_name: 'Unknown Test',
+              }
+            }
+          })
+        )
+        return enrichedResults
+      })(),
+      (async () => {
+        const patientRepo = new PatientRepository()
+        return patientRepo.findById(certificate.patient_id)
+      })(),
+      (async () => {
+        const clinicRepo = new ClinicRepository()
+        return clinicRepo.findById(certificate.clinic_id)
+      })()
+    ])
     
-    // Enrich test results with test names
-    const enrichedTestResults = await Promise.all(
-      testResults.map(async (testResult) => {
-        try {
-          const clinicalTestRepo = new ClinicalTestRepository()
-          const test = await clinicalTestRepo.findById(testResult.test_code)
-          return {
-            ...testResult,
-            test_name: test?.test_name || 'Unknown Test',
-          }
-        } catch (error) {
-          console.error("Error fetching test name:", error)
-          return {
-            ...testResult,
-            test_name: 'Unknown Test',
-          }
-        }
-      })
-    )
+    if (!patient) {
+      throw new Error("Patient not found")
+    }
     
-    // Get patient
-    const patientRepo = new PatientRepository()
-    const patient = await patientRepo.findById(certificate.patient_id)
-    
-    // Get clinic
-    const clinicRepo = new ClinicRepository()
-    const clinic = await clinicRepo.findById(certificate.clinic_id)
-    
-    // Get branch if available (from appointment)
+    if (!clinic) {
+      throw new Error("Clinic not found")
+    }
+
+    // Get branch if available
     let branch = null
     if (certificate.appointment_id) {
       try {
@@ -280,7 +335,7 @@ export class CertificateRepository extends BaseRepository<Certificate> {
 
     return {
       certificate,
-      testResults: enrichedTestResults,
+      testResults,
       patient,
       clinic,
       branch
@@ -291,29 +346,10 @@ export class CertificateRepository extends BaseRepository<Certificate> {
     return this.update(certificateId, { status })
   }
 
-    async findByTemplateId(templateId: string): Promise<Certificate[]> {
+  async findByTemplateId(templateId: string): Promise<Certificate[]> {
     return this.find([
       Query.equal("template_id", templateId),
       Query.orderDesc("issue_date"),
     ])
-  }
-
-  async updateWithTemplate(certificateId: string, templateId: string): Promise<Certificate> {
-    return this.update(certificateId, {
-      template_id: templateId,
-      updated_at: new Date().toISOString()
-    })
-  }
-
-  async getTemplateUsageStats(clinicId: string): Promise<Record<string, number>> {
-    const certificates = await this.findByClinicId(clinicId)
-    const stats: Record<string, number> = {}
-    
-    certificates.forEach(cert => {
-      const templateId = cert.template_id || 'no_template'
-      stats[templateId] = (stats[templateId] || 0) + 1
-    })
-    
-    return stats
   }
 }

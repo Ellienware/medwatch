@@ -7,6 +7,7 @@ import { Query } from "appwrite"
 import { getCurrentUser } from "@/lib/auth/actions"
 import { Clock, Eye, Pencil, MoreVertical } from "lucide-react"
 import Link from "next/link"
+import { Stethoscope } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,6 +169,13 @@ export async function AppointmentsTable({ searchParams }: AppointmentsTableProps
                                   Record Test
                                 </Link>
                               </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/clinic/assessments/start?appointment=${appointment.$id}`}>
+                                  <Stethoscope className="h-4 w-4 mr-2" />
+                                  Start Clinical Assessment
+                                </Link>
+                              </DropdownMenuItem>
+
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="text-red-600">
                                 <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

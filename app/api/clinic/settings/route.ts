@@ -1,3 +1,4 @@
+//api/clinic/settings/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth/session"
 import { ClinicRepository } from "@/lib/repositories"

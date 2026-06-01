@@ -1,334 +1,198 @@
-// scripts/setup-certificate-final.ts
-import { Client, Databases, Permission, Role, IndexType } from "node-appwrite"
-import * as dotenv from "dotenv"
+// scripts/update_schemma.ts - UPDATED FOR CLOUD APPWRITE
+import { Client, Databases } from 'node-appwrite'
+import * as dotenv from 'dotenv'
 
+// Load from .env.local
 dotenv.config({ path: '.env.local' })
 
-const ENDPOINT = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!
-const PROJECT_ID = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!
-const API_KEY = process.env.APPWRITE_API_KEY!
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!
+console.log('🔧 Connecting to Cloud Appwrite...')
+console.log('Endpoint:', process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT)
+console.log('Project ID:', process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID)
+console.log('API Key:', process.env.APPWRITE_API_KEY ? '✓ Set' : '✗ Missing')
 
+// Create client with Cloud Appwrite settings
 const client = new Client()
-  .setEndpoint(ENDPOINT)
-  .setProject(PROJECT_ID)
-  .setKey(API_KEY)
+  .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+  .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!)
+  .setKey(process.env.APPWRITE_API_KEY!)
+  .setSelfSigned(true) // Important for HTTPS
 
 const databases = new Databases(client)
+const DATABASE_ID = 'medsurv_db'
 
-// Helper to wait with retry
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-// Retry function
-async function retryOperation<T>(
-  operation: () => Promise<T>,
-  maxRetries: number = 3,
-  delay: number = 1000
-): Promise<T> {
-  for (let i = 0; i < maxRetries; i++) {
+async function verifyConnection() {
+  try {
+    console.log('\n📡 Testing connection to Cloud Appwrite...')
+    
+    // Try a simple API call
+    const response = await databases.list()
+    console.log('✅ Connection successful!')
+    console.log(`Found ${response.total} database(s)`)
+    
+    // Verify our database exists
     try {
-      return await operation()
-    } catch (error: any) {
-      if (i === maxRetries - 1) throw error
-      console.log(`  ⏳ Retry ${i + 1}/${maxRetries} after error: ${error.message}`)
-      await wait(delay * (i + 1))
+      const db = await databases.get(DATABASE_ID)
+      console.log(`✅ Database "${db.name}" found`)
+      return true
+    } catch (dbError) {
+      console.error(`❌ Database "${DATABASE_ID}" not found`)
+      console.error('Please create the database first in Appwrite Console')
+      return false
     }
+    
+  } catch (error) {
+    console.error('❌ Connection failed:', error instanceof Error ? error.message : String(error))
+    
+    // Provide troubleshooting tips
+    console.log('\n🔧 Troubleshooting tips:')
+    console.log('1. Check your API key has proper permissions (Databases Read/Write)')
+    console.log('2. Verify project ID is correct')
+    console.log('3. Make sure you\'re using the correct endpoint for your region')
+    console.log('   - fra.cloud.appwrite.io for Frankfurt')
+    console.log('   - us.cloud.appwrite.io for USA')
+    console.log('   - asia.cloud.appwrite.io for Asia')
+    
+    return false
   }
-  throw new Error('Max retries reached')
 }
 
-async function setupCertificateTemplatesCollection() {
-  console.log("🚀 Setting up certificate_templates collection...")
-  console.log("=".repeat(60))
+async function updateDatabase() {
+  console.log('\n🚀 Starting database schema update...')
   
-  // Delete existing collection if it exists
-  try {
-    await databases.getCollection(DATABASE_ID, "certificate_templates")
-    console.log("⚠ Collection exists, deleting...")
-    await databases.deleteCollection(DATABASE_ID, "certificate_templates")
-    console.log("✓ Old collection deleted")
-    await wait(3000) // Wait for deletion to complete
-  } catch {
-    console.log("✓ No existing collection found")
+  // First verify connection
+  if (!await verifyConnection()) {
+    console.error('\n❌ Cannot proceed without valid connection')
+    process.exit(1)
   }
   
-  // Create collection
   try {
-    const admin = Role.team("admin")
-    const readPerms = [Permission.read(admin)]
-    const writePerms = [Permission.write(admin)]
+    console.log('\n📊 Updating collections...')
     
-    await databases.createCollection(
-      DATABASE_ID,
-      "certificate_templates",
-      "Certificate Templates",
-      [...readPerms, ...writePerms],
-      false
-    )
-    console.log("✓ Collection created successfully")
-  } catch (error: any) {
-    console.error("❌ Failed to create collection:", error.message)
-    return
+    // Batch updates with error handling
+    const updates = [
+      { collection: 'test_results', fields: getTestResultFields() },
+      { collection: 'certificates', fields: getCertificateFields() },
+      { collection: 'appointments', fields: getAppointmentFields() },
+      { collection: 'patients', fields: getPatientFields() },
+    ]
+    
+    for (const update of updates) {
+      await updateCollection(update.collection, update.fields)
+    }
+    
+    console.log('\n🎉 Database update completed successfully!')
+    console.log('\nNext steps:')
+    console.log('1. Run: npm run appwrite:check')
+    console.log('2. Update repository mapping functions')
+    console.log('3. Test with your application')
+    
+  } catch (error) {
+    console.error('\n❌ Update failed:', error instanceof Error ? error.message : String(error))
+    process.exit(1)
   }
-  
-  // Wait for collection to be ready
-  console.log("⏳ Waiting for collection to initialize...")
-  await wait(5000)
-  
-  // Define attributes - MINIMAL VERSION for free plan
-  // Free plan has limits, so we need to be conservative
-  const attributes = [
-    // REQUIRED FIELDS - minimal sizes
-    { name: "clinic_id", type: "string", size: 36, required: true },
-    { name: "name", type: "string", size: 100, required: true },
-    { name: "category", type: "string", size: 30, required: true },
-    
-    // JSON fields - store as JSON strings
-    { name: "settings", type: "string", size: 1500, required: true },
-    { name: "layout", type: "string", size: 1500, required: true },
-    
-    // Boolean fields - NO default values for required
-    { name: "is_default", type: "boolean", required: true },
-    { name: "is_one_page", type: "boolean", required: true },
-    
-    // Array field - WITHOUT encryption (free plan doesn't support)
-    { name: "sections_included", type: "string", size: 20, required: true, array: true },
-    
-    // Metadata
-    { name: "created_by", type: "string", size: 36, required: true },
-    { name: "created_at", type: "datetime", required: true },
-    { name: "updated_at", type: "datetime", required: true },
+}
+
+function getTestResultFields(): [string, string, any?][] {
+  return [
+    ['test_code', 'string', 100],
+    ['test_name', 'string', 200],
+    ['is_sensitive', 'boolean', false],
+    ['test_price', 'float'],
+    ['validation_warnings', 'string', 2000],
+    ['requires_review', 'boolean', false],
+    ['is_critical', 'boolean', false],
+    ['validation_status', 'string', 50],
   ]
-  
-  // OPTIONAL fields - add these only if we have capacity
-  const optionalAttributes = [
-    { name: "description", type: "string", size: 150, required: false },
-    { name: "thumbnail_url", type: "string", size: 150, required: false },
+}
+
+function getCertificateFields(): [string, string, any?][] {
+  return [
+    ['fitness_status', 'string', 50],
+    ['medical_type', 'string', 50],
+    ['template_type', 'string', 50],
+    ['settings_override', 'string', 2000],
+    ['lung_function_results', 'string', 1000],
+    ['audiometry_results', 'string', 1000],
+    ['vision_results', 'string', 500],
+    ['urinalysis_results', 'string', 500],
+    ['referrals', 'string', 500],
+    ['rules_evaluation', 'string', 3000],
+    ['suggested_fitness_decision', 'string', 50],
+    ['evaluation_confidence', 'float'],
+    ['doctor_decision_override', 'boolean', false],
+    ['override_reason', 'string', 500],
+    ['decision_validation', 'string', 1000],
+    ['chest_xray_normal', 'boolean', true],
   ]
+}
+
+function getAppointmentFields(): [string, string, any?][] {
+  return [
+    ['last_test_at', 'datetime'],
+    ['requires_doctor_review', 'boolean', false],
+  ]
+}
+
+function getPatientFields(): [string, string, any?][] {
+  return [
+    ['merged_into', 'string', 36],
+    ['merged_at', 'datetime'],
+    ['merged_by', 'string', 36],
+  ]
+}
+
+async function updateCollection(collectionId: string, fields: [string, string, any?][]) {
+  console.log(`\n📝 Updating ${collectionId}...`)
   
-  console.log("\n📝 Adding core attributes...")
-  const successfulAttributes: string[] = []
+  let added = 0
+  let skipped = 0
+  let failed = 0
   
-  // Add core attributes first
-  for (const attr of attributes) {
+  for (const [name, type, sizeOrDefault] of fields) {
     try {
-      console.log(`  ➕ Adding: ${attr.name}`)
+      console.log(`  + ${name} (${type})`)
       
-      await retryOperation(async () => {
-        if (attr.type === "string") {
-          if (attr.array) {
-            // For array attributes, explicitly disable encryption
-            await databases.createStringAttribute(
-              DATABASE_ID,
-              "certificate_templates",
-              attr.name,
-              attr.size!,
-              attr.required,
-              undefined, // NO default for required
-              false,     // NO encryption (free plan)
-              true      // This is an array
-            )
-          } else {
-            await databases.createStringAttribute(
-              DATABASE_ID,
-              "certificate_templates",
-              attr.name,
-              attr.size!,
-              attr.required,
-              attr.required ? undefined : "" // Only default for optional
-            )
-          }
-        } else if (attr.type === "boolean") {
-          // For required booleans, don't provide default
-          await databases.createBooleanAttribute(
-            DATABASE_ID,
-            "certificate_templates",
-            attr.name,
-            attr.required,
-            attr.required ? undefined : false
-          )
-        } else if (attr.type === "datetime") {
-          await databases.createDatetimeAttribute(
-            DATABASE_ID,
-            "certificate_templates",
-            attr.name,
-            attr.required
-          )
-        }
-      }, 2, 2000)
+      // Add delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 200))
       
-      console.log(`    ✓ ${attr.name} added`)
-      successfulAttributes.push(attr.name)
+      switch (type) {
+        case 'string':
+          await databases.createStringAttribute(DATABASE_ID, collectionId, name, sizeOrDefault || 255, false)
+          break
+        case 'boolean':
+          await databases.createBooleanAttribute(DATABASE_ID, collectionId, name, false, sizeOrDefault || false)
+          break
+        case 'float':
+          await databases.createFloatAttribute(DATABASE_ID, collectionId, name, false)
+          break
+        case 'datetime':
+          await databases.createDatetimeAttribute(DATABASE_ID, collectionId, name, false)
+          break
+      }
+      
+      added++
+      console.log(`    ✅ Added`)
+      
     } catch (error: any) {
-      if (error.message.includes("already exists")) {
-        console.log(`    ✓ ${attr.name} already exists`)
-        successfulAttributes.push(attr.name)
-      } else if (error.message.includes("Encrypted string attributes")) {
-        console.log(`    ⚠ ${attr.name}: Free plan limitation. Trying without array...`)
-        // Try as regular string instead of array
-        try {
-          await databases.createStringAttribute(
-            DATABASE_ID,
-            "certificate_templates",
-            attr.name,
-            500, // Larger size to store JSON array as string
-            attr.required,
-            undefined,
-            false
-          )
-          console.log(`    ✓ ${attr.name} added as JSON string`)
-          successfulAttributes.push(attr.name)
-        } catch (e: any) {
-          console.log(`    ✗ ${attr.name} failed: ${e.message}`)
-        }
+      if (error.code === 409) {
+        skipped++
+        console.log(`    ⚠️ Already exists`)
+      } else if (error.code === 404) {
+        failed++
+        console.log(`    ❌ Collection not found`)
+        break
       } else {
-        console.log(`    ✗ ${attr.name} failed: ${error.message}`)
-      }
-    }
-    
-    // Wait between attributes
-    await wait(800)
-  }
-  
-  // Try to add optional attributes if we have space
-  console.log("\n📝 Trying optional attributes...")
-  for (const attr of optionalAttributes) {
-    try {
-      // Skip if we already have too many attributes
-      if (successfulAttributes.length >= 15) { // Free plan limit
-        console.log(`  ⚠ Skipping ${attr.name}: Too many attributes`)
-        continue
-      }
-      
-      console.log(`  ➕ Adding optional: ${attr.name}`)
-      
-      await databases.createStringAttribute(
-        DATABASE_ID,
-        "certificate_templates",
-        attr.name,
-        attr.size!,
-        attr.required,
-        "" // Default empty string for optional
-      )
-      
-      console.log(`    ✓ ${attr.name} added`)
-      successfulAttributes.push(attr.name)
-      await wait(800)
-    } catch (error: any) {
-      if (!error.message.includes("already exists")) {
-        console.log(`    ⚠ ${attr.name} skipped: ${error.message}`)
+        failed++
+        console.log(`    ❌ Error: ${error.message}`)
       }
     }
   }
   
-  console.log(`\n✅ ${successfulAttributes.length} attributes added successfully`)
-  console.log("⏳ Waiting for attributes to be ready...")
-  await wait(8000)
-  
-  // Create indexes for existing attributes
-  console.log("\n🔧 Creating indexes...")
-  
-  const indexes = [
-    { name: "idx_clinic", key: "clinic_id", type: IndexType.Key },
-    { name: "idx_category", key: "category", type: IndexType.Key },
-    { name: "idx_created", key: "created_at", type: IndexType.Key },
-  ]
-  
-  // Only create indexes for attributes that exist
-  for (const index of indexes) {
-    if (successfulAttributes.includes(index.key)) {
-      try {
-        await retryOperation(async () => {
-          await databases.createIndex(
-            DATABASE_ID,
-            "certificate_templates",
-            index.name,
-            index.type,
-            [index.key]
-          )
-        })
-        console.log(`  ✓ Index: ${index.name}`)
-      } catch (error: any) {
-        if (error.message.includes("already exists")) {
-          console.log(`  ✓ Index ${index.name} already exists`)
-        } else {
-          console.log(`  ⚠ Index ${index.name}: ${error.message}`)
-        }
-      }
-      await wait(1500)
-    } else {
-      console.log(`  ⚠ Skipping index ${index.name}: ${index.key} not available`)
-    }
-  }
-  
-  // Try compound index if both attributes exist
-  if (successfulAttributes.includes("clinic_id") && successfulAttributes.includes("is_default")) {
-    try {
-      await databases.createIndex(
-        DATABASE_ID,
-        "certificate_templates",
-        "idx_clinic_default",
-        IndexType.Key,
-        ["clinic_id", "is_default"]
-      )
-      console.log("  ✓ Compound index: idx_clinic_default")
-    } catch (error: any) {
-      console.log(`  ⚠ Compound index failed: ${error.message}`)
-    }
-  }
-  
-  console.log("\n" + "=".repeat(60))
-  console.log("🎉 SETUP COMPLETE!")
-  console.log("=".repeat(60))
-  
-  console.log("\n📊 SUMMARY:")
-  console.log(`  • Collection: certificate_templates`)
-  console.log(`  • Attributes created: ${successfulAttributes.length}`)
-  console.log(`  • Indexes created: ${indexes.length}`)
-  
-  console.log("\n📋 Created attributes:")
-  successfulAttributes.forEach(attr => console.log(`  • ${attr}`))
-  
-  console.log("\n💡 NOTES for your application:")
-  console.log("  1. 'sections_included' is stored as JSON string (free plan limitation)")
-  console.log("  2. Optional fields may not be available due to plan limits")
-  console.log("  3. Handle JSON parsing for 'settings', 'layout', 'sections_included'")
-  
-  console.log("\n🔄 Next steps in your app:")
-  console.log(`  1. Parse JSON strings: JSON.parse(record.settings)`)
-  console.log(`  2. For 'sections_included', you may need to store as: "['patient_info', 'test_results']"`)
-  console.log(`  3. Set default values in your app logic (is_default: false, etc.)`)
-  
-  // Sample code for app
-  console.log("\n📝 Sample code for creating a template:")
-  console.log(`
-  const template = {
-    clinic_id: "clinic_123",
-    name: "Standard Certificate",
-    category: "medical",
-    settings: JSON.stringify({ fontSize: 12, margin: 20 }),
-    layout: JSON.stringify({ header: true, footer: false }),
-    is_default: false,
-    is_one_page: true,
-    sections_included: JSON.stringify(['patient_info', 'diagnosis']), // Store as JSON string
-    created_by: "user_123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-  `)
+  console.log(`  Results: ${added} added, ${skipped} skipped, ${failed} failed`)
 }
 
-async function main() {
-  try {
-    await setupCertificateTemplatesCollection()
-  } catch (error: any) {
-    console.error("\n❌ Fatal error:", error.message)
-    console.log("\n💡 Troubleshooting:")
-    console.log("  1. Check your Appwrite API key")
-    console.log("  2. Verify database ID is correct")
-    console.log("  3. Ensure you have proper permissions")
-    console.log("  4. Try upgrading Appwrite plan if hitting limits")
-  }
-}
-
-main().catch(console.error)
+// Run with error handling
+updateDatabase().catch(error => {
+  console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+  process.exit(1)
+})

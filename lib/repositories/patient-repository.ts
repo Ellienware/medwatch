@@ -35,12 +35,12 @@ protected mapToEntity(doc: any): Patient {
     chronic_conditions: doc.chronic_conditions || null,
     emergency_contact_name: doc.emergency_contact_name || null,
     emergency_contact_phone: doc.emergency_contact_phone || null,
+    emergency_contact_relationship: doc.emergency_contact_relationship || null, // Add this line
     consent_given: doc.consent_given || false,
     consent_date: doc.consent_date || null,
     photo_url: doc.photo_url || null,
     notes: doc.notes || null,
     is_active: doc.is_active !== undefined ? doc.is_active : true,
-    // Add employer company name if available
     employer_company_name: doc.employer_company_name || null,
     created_at: doc.$createdAt,
     updated_at: doc.$updatedAt,

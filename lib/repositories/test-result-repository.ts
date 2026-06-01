@@ -11,75 +11,92 @@ export class TestResultRepository extends BaseRepository<TestResult> {
   }
 
   async create(data: Partial<TestResult>): Promise<TestResult> {
-    // Map test_code to test_id for database
-    const dbData = {
+    const dbData: any = {
       ...data,
-      test_id: data.test_code,  // ✅ Map test_code to test_id
-      results: JSON.stringify(data.results ?? {}),
-      attachments: JSON.stringify(data.attachments ?? []),
+      // ✅ CRITICAL: Store both test_code and test_id for compatibility
+      test_id: data.test_id || data.test_code,
+      test_code: data.test_code || data.test_id,
+      results: JSON.stringify(data.results || {}),
+      attachments: JSON.stringify(data.attachments || []),
+      validation_warnings: data.validation_warnings 
+        ? JSON.stringify(data.validation_warnings)
+        : "[]",
     }
     
-    // Remove test_code to avoid duplicate field
-    delete dbData.test_code
-    
-    return super.create(dbData as any)
+    return super.create(dbData)
   }
 
   async update(id: string, data: Partial<TestResult>): Promise<TestResult> {
     const payload: any = { ...data }
-
-    // Map test_code to test_id if provided
-    if (payload.test_code) {
+    
+    // Handle test_code/test_id mapping
+    if (payload.test_code && !payload.test_id) {
       payload.test_id = payload.test_code
-      delete payload.test_code
     }
-
+    
+    if (payload.test_id && !payload.test_code) {
+      payload.test_code = payload.test_id
+    }
+    
+    // Stringify JSON fields
     if (payload.results) {
       payload.results = JSON.stringify(payload.results)
     }
-
+    
     if (payload.attachments !== undefined) {
-      payload.attachments = JSON.stringify(payload.attachments ?? [])
+      payload.attachments = JSON.stringify(payload.attachments || [])
     }
-
+    
+    if (payload.validation_warnings) {
+      payload.validation_warnings = JSON.stringify(payload.validation_warnings)
+    }
+    
     return super.update(id, payload)
   }
 
-  protected mapToEntity(doc: any): TestResult {
-    let results: Record<string, any> = {}
-    let attachments: any[] = []
-
+   protected mapToEntity(doc: any): TestResult {
+    // Parse results safely
+    let results: any = {}
     try {
       results = doc.results ? JSON.parse(doc.results) : {}
     } catch {
       results = {}
     }
-
+    
+    // Parse attachments safely
+    let attachments: any[] = []
     try {
       attachments = doc.attachments ? JSON.parse(doc.attachments) : []
     } catch {
       attachments = []
     }
 
+    // ✅ CRITICAL FIX: Support both test_code and test_id
     return {
       id: doc.$id,
       clinic_id: doc.clinic_id,
       appointment_id: doc.appointment_id,
       patient_id: doc.patient_id,
-      test_code: doc.test_id,  // ✅ Map database test_id to application test_code
+      // Map database fields to application interface
+      test_id: doc.test_id,
+      test_code: doc.test_code || doc.test_id, // Support both!
       performed_by: doc.performed_by || null,
       performed_at: doc.performed_at,
-
-      results,
-      attachments,
-
+      results: results,
       is_normal: doc.is_normal ?? null,
       findings: doc.findings || null,
       recommendations: doc.recommendations || null,
       reviewed_by: doc.reviewed_by || null,
       reviewed_at: doc.reviewed_at || null,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
+      attachments: attachments,
+      // New fields for validation
+      validation_warnings: doc.validation_warnings 
+        ? JSON.parse(doc.validation_warnings)
+        : [],
+      is_sensitive: doc.is_sensitive || false,
+      test_price: doc.test_price || 0,
+      created_at: doc.$createdAt,
+      updated_at: doc.$updatedAt,
     }
   }
 

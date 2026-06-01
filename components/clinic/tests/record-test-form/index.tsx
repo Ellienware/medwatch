@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Calendar, RefreshCw, User, Clock, Building, CheckCircle, XCircle, ClipboardList } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { createTestResult, createMultipleTestResults } from "@/lib/actions/test-result-actions"
+import { createMultipleTestResults } from "@/lib/actions/test-result-actions" // Make sure this is exported
 import { useToast } from "@/hooks/use-toast"
 import { getAppointmentsForTestRecording } from "@/lib/actions/appointment-actions"
 import { Badge } from "@/components/ui/badge"
@@ -35,22 +35,23 @@ export function RecordTestForm({
   const [testFormData, setTestFormData] = useState<Record<string, any>>({})
   const [activeTestTab, setActiveTestTab] = useState<string>("")
 
-  // Appointment state
+  // Appointment state - Fixed type issue
   const [appointments, setAppointments] = useState<AppointmentOption[]>(() => {
-    if (initialAppointments?.length) {
-      return initialAppointments.map(apt => ({
-        id: apt.id,
-        display: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''} - ${apt.appointment_time}`,
-        appointment_time: apt.appointment_time,
-        appointment_date: apt.appointment_date,
-        patient_id: apt.patient_id,
-        patient_name: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''}`.trim() || `Patient ${apt.patient_id.substring(0, 8)}`,
-        status: apt.status,
-        appointment_type: apt.appointment_type,
-        employer_id: apt.employer_id,
-      }))
+    if (!initialAppointments || initialAppointments.length === 0) {
+      return []
     }
-    return []
+    
+    return initialAppointments.map((apt: any) => ({
+      id: apt.id || "",
+      display: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''} - ${apt.appointment_time || ''}`,
+      appointment_time: apt.appointment_time || "",
+      appointment_date: apt.appointment_date || "",
+      patient_id: apt.patient_id || "",
+      patient_name: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''}`.trim() || `Patient ${apt.patient_id?.substring(0, 8) || 'unknown'}`,
+      status: apt.status || "unknown",
+      appointment_type: apt.appointment_type || "",
+      employer_id: apt.employer_id || null,
+    }))
   })
   
   const [fetchingAppointments, setFetchingAppointments] = useState(!initialAppointments?.length)
@@ -74,7 +75,19 @@ export function RecordTestForm({
       })
       
       if (result.success) {
-        setAppointments(result.appointments)
+        const appointmentOptions: AppointmentOption[] = result.appointments.map((apt: any) => ({
+          id: apt.id || "",
+          display: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''} - ${apt.appointment_time || ''}`,
+          appointment_time: apt.appointment_time || "",
+          appointment_date: apt.appointment_date || "",
+          patient_id: apt.patient_id || "",
+          patient_name: `${apt.patient?.first_name || ''} ${apt.patient?.last_name || ''}`.trim() || `Patient ${apt.patient_id?.substring(0, 8) || 'unknown'}`,
+          status: apt.status || "unknown",
+          appointment_type: apt.appointment_type || "",
+          employer_id: apt.employer_id || null,
+        }))
+        
+        setAppointments(appointmentOptions)
         setSelectedAppointment("")
         
         if (result.appointments.length === 0) {
@@ -142,6 +155,21 @@ export function RecordTestForm({
     setActiveTestTab("")
   }, [])
 
+  // Add this function to identify sensitive tests
+  const isSensitiveTest = (testCode: string): boolean => {
+    const sensitiveTests = [
+      'hiv_test',
+      'sti_test',
+      'hepatitis_b',
+      'hepatitis_c',
+      'tb_test',
+      'drug_screening',
+      'genetic_testing',
+      'mental_health_assessment',
+    ]
+    return sensitiveTests.includes(testCode)
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     
@@ -180,42 +208,41 @@ export function RecordTestForm({
         attachments: [],
         reviewed_by: null,
         reviewed_at: null,
+        // Add sensitive test flag
+        is_sensitive: isSensitiveTest(testCode),
       }))
 
-      // Call batch function (you'll need to create this)
+      // Use the createMultipleTestResults action
       const result = await createMultipleTestResults(testResultsData)
 
       if (result.success) {
         toast({
           title: "Success!",
-          description: `${result.created} test(s) saved successfully.`,
+          description: `${result.created} test(s) saved and encrypted successfully.`,
+          duration: 5000,
         })
         router.push("/clinic/tests")
+        router.refresh()
       } else {
         toast({
-          title: result.created > 0 ? "Partial Success" : "Error",
-          description: result.created > 0 
+          title: result.created && result.created > 0 ? "Partial Success" : "Error",
+          description: result.created && result.created > 0 
             ? `${result.created} of ${selectedTests.length} tests saved. ${result.failed} failed.`
             : `Failed to save all tests.`,
-          variant: result.created > 0 ? "default" : "destructive",
+          variant: result.created && result.created > 0 ? "default" : "destructive",
+          duration: 5000,
         })
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to save test results.",
+        description: error.message || "Failed to save test results.",
         variant: "destructive",
+        duration: 5000,
       })
     } finally {
       setLoading(false)
     }
-  }
-
-  // Add this function to your component or create a separate utility file
-
-const calculateIsNormal = (testCode: string, data: Record<string, any>): boolean | null => {
-  if (!data || Object.keys(data).length === 0) {
-    return null // No data provided
   }
 
   // Helper function to parse numeric values
@@ -249,309 +276,159 @@ const calculateIsNormal = (testCode: string, data: Record<string, any>): boolean
     return false
   }
 
-  switch (testCode) {
-    // ========== AUDIOMETRY ==========
-    case 'audiometry':
-      try {
-        let abnormalCount = 0
-        const thresholds = [
-          'right_250Hz', 'right_500Hz', 'right_1000Hz', 'right_2000Hz', 'right_4000Hz', 'right_8000Hz',
-          'left_250Hz', 'left_500Hz', 'left_1000Hz', 'left_2000Hz', 'left_4000Hz', 'left_8000Hz'
-        ]
-        
-        thresholds.forEach(key => {
-          const value = parseNumeric(data[key])
-          // Normal hearing threshold: 0-25 dB HL (decibels Hearing Level)
-          // Values above 25 dB HL indicate hearing loss
-          if (value !== null && value > 25) {
-            abnormalCount++
+  const calculateIsNormal = (testCode: string, data: Record<string, any>): boolean | null => {
+    if (!data || Object.keys(data).length === 0) {
+      return null // No data provided
+    }
+
+    switch (testCode) {
+      case 'audiometry':
+        try {
+          let abnormalCount = 0
+          const thresholds = [
+            'right_250Hz', 'right_500Hz', 'right_1000Hz', 'right_2000Hz', 'right_4000Hz', 'right_8000Hz',
+            'left_250Hz', 'left_500Hz', 'left_1000Hz', 'left_2000Hz', 'left_4000Hz', 'left_8000Hz'
+          ]
+          
+          thresholds.forEach(key => {
+            const value = parseNumeric(data[key])
+            if (value !== null && value > 25) {
+              abnormalCount++
+            }
+          })
+          
+          return abnormalCount <= 2
+        } catch {
+          return null
+        }
+
+      case 'spirometry':
+        try {
+          const fvc = parseNumeric(data.fvc)
+          const fev1 = parseNumeric(data.fev1)
+          const fev1FvcRatio = parseNumeric(data.fev1_fvc_ratio)
+          const pef = parseNumeric(data.pef)
+          
+          let isNormal = true
+          
+          if (fvc !== null && fvc < 0.80) isNormal = false
+          if (fev1 !== null && fev1 < 0.80) isNormal = false
+          if (fev1FvcRatio !== null && fev1FvcRatio < 0.70) isNormal = false
+          if (pef !== null && pef < 80) isNormal = false
+          
+          return isNormal
+        } catch {
+          return null
+        }
+
+      case 'vision':
+        try {
+          const rightDistance = data.right_distance
+          const leftDistance = data.left_distance
+          const bothDistance = data.both_distance
+          const colorVision = data.color_vision
+          
+          let isNormal = true
+          
+          if (rightDistance && !isVisionNormal(rightDistance)) isNormal = false
+          if (leftDistance && !isVisionNormal(leftDistance)) isNormal = false
+          if (bothDistance && !isVisionNormal(bothDistance)) isNormal = false
+          
+          if (colorVision && colorVision.toLowerCase() !== 'normal') {
+            isNormal = false
           }
-        })
-        
-        // If more than 2 frequencies show abnormal results, consider test abnormal
-        return abnormalCount <= 2
-      } catch {
-        return null
-      }
-
-    // ========== SPIROMETRY ==========
-    case 'spirometry':
-      try {
-        const fvc = parseNumeric(data.fvc) // Forced Vital Capacity
-        const fev1 = parseNumeric(data.fev1) // Forced Expiratory Volume in 1 second
-        const fev1FvcRatio = parseNumeric(data.fev1_fvc_ratio) // FEV1/FVC ratio
-        const pef = parseNumeric(data.pef) // Peak Expiratory Flow
-        
-        let isNormal = true
-        
-        // Normal ranges (adjust based on age, gender, height - these are general)
-        // FVC: Typically > 80% of predicted
-        if (fvc !== null && fvc < 0.80) isNormal = false
-        
-        // FEV1: Typically > 80% of predicted
-        if (fev1 !== null && fev1 < 0.80) isNormal = false
-        
-        // FEV1/FVC ratio: Typically > 0.70
-        if (fev1FvcRatio !== null && fev1FvcRatio < 0.70) isNormal = false
-        
-        // PEF: Typically > 80% of predicted
-        if (pef !== null && pef < 80) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    // ========== VISION TEST ==========
-    case 'vision':
-      try {
-        const rightDistance = data.right_distance
-        const leftDistance = data.left_distance
-        const bothDistance = data.both_distance
-        const colorVision = data.color_vision
-        
-        let isNormal = true
-        
-        // Check distance vision (normal is 20/20 or 6/6)
-        if (rightDistance && !isVisionNormal(rightDistance)) isNormal = false
-        if (leftDistance && !isVisionNormal(leftDistance)) isNormal = false
-        if (bothDistance && !isVisionNormal(bothDistance)) isNormal = false
-        
-        // Check color vision
-        if (colorVision && colorVision.toLowerCase() !== 'normal') {
-          isNormal = false
+          
+          return isNormal
+        } catch {
+          return null
         }
-        
-        return isNormal
-      } catch {
-        return null
-      }
 
-    // ========== BLOOD PRESSURE ==========
-    case 'blood_pressure':
-      try {
-        const systolic = parseNumeric(data.systolic)
-        const diastolic = parseNumeric(data.diastolic)
-        
-        if (systolic === null || diastolic === null) return null
-        
-        // Normal blood pressure: Systolic < 120 and Diastolic < 80
-        // Elevated: 120-129/<80
-        // Hypertension Stage 1: 130-139/80-89
-        // Hypertension Stage 2: ≥140/≥90
-        const isNormal = systolic < 120 && diastolic < 80
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    // ========== URINALYSIS ==========
-    case 'urinalysis':
-      try {
-        // Normal urinalysis results
-        const normalValues: Record<string, any> = {
-          ph: { min: 4.5, max: 8.0 },
-          specific_gravity: { min: 1.005, max: 1.030 },
-          glucose: 0,
-          protein: 0,
-          ketones: 0,
-          bilirubin: 0,
-          blood: 0,
-          nitrites: false,
-          leukocytes: 0
+      case 'blood_pressure':
+        try {
+          const systolic = parseNumeric(data.systolic)
+          const diastolic = parseNumeric(data.diastolic)
+          
+          if (systolic === null || diastolic === null) return null
+          
+          const isNormal = systolic < 120 && diastolic < 80
+          
+          return isNormal
+        } catch {
+          return null
         }
-        
-        let isNormal = true
-        
-        Object.keys(normalValues).forEach(key => {
-          if (data[key] !== undefined) {
-            const expected = normalValues[key]
-            const actual = data[key]
-            
-            if (typeof expected === 'object') {
-              // Range check
-              const value = parseNumeric(actual)
-              if (value !== null && !isInRange(value, expected.min, expected.max)) {
-                isNormal = false
-              }
-            } else if (typeof expected === 'boolean') {
-              // Boolean check
-              if (Boolean(actual) !== expected) {
-                isNormal = false
-              }
-            } else {
-              // Exact value check
-              if (parseNumeric(actual) !== expected) {
-                isNormal = false
+
+      case 'urinalysis':
+        try {
+          const normalValues: Record<string, any> = {
+            ph: { min: 4.5, max: 8.0 },
+            specific_gravity: { min: 1.005, max: 1.030 },
+            glucose: 0,
+            protein: 0,
+            ketones: 0,
+            bilirubin: 0,
+            blood: 0,
+            nitrites: false,
+            leukocytes: 0
+          }
+          
+          let isNormal = true
+          
+          Object.keys(normalValues).forEach(key => {
+            if (data[key] !== undefined) {
+              const expected = normalValues[key]
+              const actual = data[key]
+              
+              if (typeof expected === 'object') {
+                const value = parseNumeric(actual)
+                if (value !== null && !isInRange(value, expected.min, expected.max)) {
+                  isNormal = false
+                }
+              } else if (typeof expected === 'boolean') {
+                if (Boolean(actual) !== expected) {
+                  isNormal = false
+                }
+              } else {
+                if (parseNumeric(actual) !== expected) {
+                  isNormal = false
+                }
               }
             }
+          })
+          
+          return isNormal
+        } catch {
+          return null
+        }
+
+      default:
+        if (data.findings) {
+          const findings = data.findings.toLowerCase()
+          const abnormalKeywords = [
+            'abnormal', 'elevated', 'reduced', 'decreased', 'increased', 
+            'positive', 'detected', 'irregular', 'poor', 'failed', 'weak'
+          ]
+          
+          for (const keyword of abnormalKeywords) {
+            if (findings.includes(keyword)) {
+              return false
+            }
           }
-        })
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    // ========== BLOOD TESTS ==========
-    case 'cbc': // Complete Blood Count
-      try {
-        const wbc = parseNumeric(data.wbc) // White Blood Cells (x10³/μL)
-        const hgb = parseNumeric(data.hgb) // Hemoglobin (g/dL)
-        const hct = parseNumeric(data.hct) // Hematocrit (%)
-        const plt = parseNumeric(data.plt) // Platelets (x10³/μL)
-        
-        let isNormal = true
-        
-        // Normal ranges
-        if (wbc !== null && !isInRange(wbc, 4.0, 11.0)) isNormal = false
-        if (hgb !== null && !isInRange(hgb, 13.5, 17.5)) isNormal = false // Male range
-        if (hct !== null && !isInRange(hct, 40, 52)) isNormal = false // Male range
-        if (plt !== null && !isInRange(plt, 150, 450)) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    case 'liver_function':
-      try {
-        const alt = parseNumeric(data.alt) // ALT (U/L)
-        const ast = parseNumeric(data.ast) // AST (U/L)
-        const alp = parseNumeric(data.alp) // ALP (U/L)
-        const bilirubin = parseNumeric(data.bilirubin) // Total Bilirubin (mg/dL)
-        const albumin = parseNumeric(data.albumin) // Albumin (g/dL)
-        
-        let isNormal = true
-        
-        // Normal ranges
-        if (alt !== null && alt > 40) isNormal = false
-        if (ast !== null && ast > 40) isNormal = false
-        if (alp !== null && !isInRange(alp, 44, 147)) isNormal = false
-        if (bilirubin !== null && bilirubin > 1.2) isNormal = false
-        if (albumin !== null && !isInRange(albumin, 3.5, 5.0)) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    case 'kidney_function':
-      try {
-        const creatinine = parseNumeric(data.creatinine) // Creatinine (mg/dL)
-        const bun = parseNumeric(data.bun) // BUN (mg/dL)
-        const gfr = parseNumeric(data.gfr) // GFR (mL/min)
-        
-        let isNormal = true
-        
-        // Normal ranges
-        if (creatinine !== null && creatinine > 1.3) isNormal = false
-        if (bun !== null && !isInRange(bun, 7, 20)) isNormal = false
-        if (gfr !== null && gfr < 60) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    case 'lipid_profile':
-      try {
-        const cholesterol = parseNumeric(data.cholesterol) // Total Cholesterol (mg/dL)
-        const hdl = parseNumeric(data.hdl) // HDL (mg/dL)
-        const ldl = parseNumeric(data.ldl) // LDL (mg/dL)
-        const triglycerides = parseNumeric(data.triglycerides) // Triglycerides (mg/dL)
-        
-        let isNormal = true
-        
-        // Normal ranges
-        if (cholesterol !== null && cholesterol > 200) isNormal = false
-        if (hdl !== null && hdl < 40) isNormal = false
-        if (ldl !== null && ldl > 100) isNormal = false
-        if (triglycerides !== null && triglycerides > 150) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    case 'blood_sugar':
-      try {
-        const fasting = parseNumeric(data.fasting) // Fasting Blood Sugar (mg/dL)
-        const random = parseNumeric(data.random) // Random Blood Sugar (mg/dL)
-        const hba1c = parseNumeric(data.hba1c) // HbA1c (%)
-        
-        let isNormal = true
-        
-        // Normal ranges
-        if (fasting !== null && fasting > 100) isNormal = false
-        if (random !== null && random > 140) isNormal = false
-        if (hba1c !== null && hba1c > 5.7) isNormal = false
-        
-        return isNormal
-      } catch {
-        return null
-      }
-
-    // ========== COVID-19 ==========
-    case 'covid_19':
-      try {
-        const result = data.result
-        const ctValue = parseNumeric(data.ct_value)
-        
-        // COVID-19 test logic
-        if (result) {
-          const lowerResult = result.toLowerCase()
-          if (lowerResult.includes('positive') || lowerResult.includes('detected')) {
-            return false // Abnormal (positive for COVID-19)
-          } else if (lowerResult.includes('negative') || lowerResult.includes('not detected')) {
-            return true // Normal (negative for COVID-19)
+          
+          const normalKeywords = [
+            'normal', 'within normal limits', 'negative', 'not detected', 
+            'good', 'excellent', 'clear', 'unremarkable', 'satisfactory'
+          ]
+          
+          for (const keyword of normalKeywords) {
+            if (findings.includes(keyword)) {
+              return true
+            }
           }
         }
         
-        // Check CT value if available (lower CT = higher viral load)
-        if (ctValue !== null) {
-          return ctValue > 35 // CT > 35 usually considered negative/very low viral load
-        }
-        
         return null
-      } catch {
-        return null
-      }
-
-    // ========== DEFAULT ==========
-    default:
-      // For tests without specific logic, check if there are findings
-      if (data.findings) {
-        const findings = data.findings.toLowerCase()
-        // If findings contain words suggesting abnormality
-        const abnormalKeywords = [
-          'abnormal', 'elevated', 'reduced', 'decreased', 'increased', 
-          'positive', 'detected', 'irregular', 'poor', 'failed', 'weak'
-        ]
-        
-        for (const keyword of abnormalKeywords) {
-          if (findings.includes(keyword)) {
-            return false
-          }
-        }
-        
-        // If findings contain words suggesting normalcy
-        const normalKeywords = [
-          'normal', 'within normal limits', 'negative', 'not detected', 
-          'good', 'excellent', 'clear', 'unremarkable', 'satisfactory'
-        ]
-        
-        for (const keyword of normalKeywords) {
-          if (findings.includes(keyword)) {
-            return true
-          }
-        }
-      }
-      
-      return null // Cannot determine
+    }
   }
-}
 
   const selectedAppointmentDetails = appointments.find(apt => apt.id === selectedAppointment)
   const formattedDate = format(new Date(selectedDate), "EEEE, MMMM d, yyyy")
@@ -822,27 +699,30 @@ const calculateIsNormal = (testCode: string, data: Record<string, any>): boolean
                     </Button>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {selectedTests.map(test => (
-                      <Badge 
-                        key={test} 
-                        variant="secondary" 
-                        className={`gap-1 ${activeTestTab === test ? 'ring-2 ring-primary' : ''}`}
-                        onClick={() => setActiveTestTab(test)}
-                      >
-                        {testIcons[test]}
-                        {test.replace('_', ' ')}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleTestToggle(test)
-                          }}
-                          className="ml-1 hover:text-destructive"
+                    {selectedTests.map(test => {
+                      const Icon = testIcons[test as keyof typeof testIcons]
+                      return (
+                        <Badge 
+                          key={test} 
+                          variant="secondary" 
+                          className={`gap-1 ${activeTestTab === test ? 'ring-2 ring-primary' : ''}`}
+                          onClick={() => setActiveTestTab(test)}
                         >
-                          <XCircle className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
+                          {Icon}
+                          {test.replace('_', ' ')}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleTestToggle(test)
+                            }}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <XCircle className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -851,15 +731,17 @@ const calculateIsNormal = (testCode: string, data: Record<string, any>): boolean
         )}
 
         {/* Test Forms */}
-        <TestFormWrapper
-          selectedTests={selectedTests}
-          activeTestTab={activeTestTab}
-          testFormData={testFormData}
-          patientName={selectedAppointmentDetails?.patient_name}
-          onTestRemove={handleTestToggle}
-          onTabChange={setActiveTestTab}
-          onTestDataChange={handleTestDataChange}
-        />
+        {selectedTests.length > 0 && (
+          <TestFormWrapper
+            selectedTests={selectedTests}
+            activeTestTab={activeTestTab}
+            testFormData={testFormData}
+            patientName={selectedAppointmentDetails?.patient_name}
+            onTestRemove={handleTestToggle}
+            onTabChange={setActiveTestTab}
+            onTestDataChange={handleTestDataChange}
+          />
+        )}
 
         {/* Actions */}
         <div className="flex justify-between items-center pt-4 border-t">

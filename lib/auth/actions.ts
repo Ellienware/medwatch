@@ -402,4 +402,3 @@ export async function inviteStaffMember(
     message: `Invitation sent to ${email}`,
   }
 }
-

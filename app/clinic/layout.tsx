@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import type React from "react"
 import { RoleGate } from "@/components/auth/role-gate"
 import { ClinicSidebar } from "@/components/clinic/sidebar"

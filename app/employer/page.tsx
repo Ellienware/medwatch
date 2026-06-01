@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { EmployerStats } from "@/components/employer/employer-stats"
 import { RecentCertificates } from "@/components/employer/recent-certificates"
 import { EmployeeHealthStatus } from "@/components/employer/employee-health-status"

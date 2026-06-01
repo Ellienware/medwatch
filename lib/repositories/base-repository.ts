@@ -1,4 +1,3 @@
-
 import { ID, Query } from "appwrite"
 import { serverDatabases } from "@/lib/appwrite/server-client"
 import { databaseCircuitBreaker, withResilience, withRetry } from "@/lib/utils/retry"
@@ -23,7 +22,7 @@ export abstract class BaseRepository<T> {
    * Add other collections here as needed
    */
   private get collectionsWithoutUpdatedAt(): string[] {
-    return ["notifications", "audit_logs"] // Add other collections that don't have updated_at
+    return ["notifications", "audit_log"] // Add other collections that don't have updated_at
   }
 
   /**
@@ -175,15 +174,15 @@ async find(queries: string[] = [], options?: { limit?: number; offset?: number }
         const now = new Date().toISOString()
         const dataWithTimestamps: any = { ...data }
         
-        // Always add created_at for all collections
-        if (!dataWithTimestamps.created_at) {
-          dataWithTimestamps.created_at = now
-        }
+        // // Always add created_at for all collections
+        // if (!dataWithTimestamps.created_at) {
+        //   dataWithTimestamps.created_at = now
+        // }
         
-        // Only add updated_at for collections that use it
-        if (this.usesUpdatedAt() && !dataWithTimestamps.updated_at) {
-          dataWithTimestamps.updated_at = now
-        }
+        // // Only add updated_at for collections that use it
+        // if (this.usesUpdatedAt() && !dataWithTimestamps.updated_at) {
+        //   dataWithTimestamps.updated_at = now
+        // }
         
         const doc = await serverDatabases.createDocument(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -212,9 +211,9 @@ async find(queries: string[] = [], options?: { limit?: number; offset?: number }
         // Only update updated_at for collections that use it
         const dataToUpdate: any = { ...data }
         
-        if (this.usesUpdatedAt()) {
-          dataToUpdate.updated_at = new Date().toISOString()
-        }
+        // if (this.usesUpdatedAt()) {
+        //   dataToUpdate.updated_at = new Date().toISOString()
+        // }
         
         const doc = await serverDatabases.updateDocument(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,

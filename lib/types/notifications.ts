@@ -13,9 +13,11 @@ export interface Notification {
   read_at?: string | null
   created_at: string
   expires_at?: string | null
+  requires_acknowledgement?: boolean
 }
 
-export type NotificationType =
+export type NotificationType =''
+  | "test_result_requires_review"
   | "appointment_scheduled"
   | "appointment_confirmed"
   | "appointment_updated"        // ADD THIS
@@ -34,5 +36,6 @@ export type NotificationType =
   | "staff_assigned"             // ADD THIS
   | "appointment_no_show"        // ADD THIS
   | "appointment_deleted"        // ADD THIS
+  | "test_result_reviewed"
 
 export type NotificationPriority = "low" | "medium" | "high" | "urgent"

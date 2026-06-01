@@ -1,4 +1,3 @@
-// components/clinic/patients/edit-patient-form.tsx - UPDATED
 "use client"
 
 import { useState } from "react"
@@ -9,22 +8,52 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2 } from "lucide-react"
+import { Loader2, Shield, Lock } from "lucide-react"
 import type { Patient } from "@/lib/types/database"
+import { updatePatient } from "@/lib/actions/patient-actions"
 
 interface EditPatientFormProps {
   patient: Patient
 }
 
+// Define the form data type
+interface FormData {
+  first_name: string
+  last_name: string
+  id_number: string
+  passport_number: string
+  date_of_birth: string
+  gender: string
+  email: string
+  phone: string
+  address: string
+  blood_type: string
+  allergies: string
+  chronic_conditions: string
+  medical_history: string
+  current_medications: string
+  emergency_contact_name: string
+  emergency_contact_phone: string
+  emergency_contact_relationship: string
+  employee_number: string
+  job_title: string
+  department: string
+  notes: string
+  is_active: boolean
+  consent_given: boolean
+}
+
 export function EditPatientForm({ patient }: EditPatientFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    first_name: patient.first_name,
-    last_name: patient.last_name,
-    id_number: patient.id_number,
+  
+  // Initialize form data with safe defaults using optional chaining
+  const [formData, setFormData] = useState<FormData>({
+    first_name: patient.first_name || "",
+    last_name: patient.last_name || "",
+    id_number: patient.id_number || "",
     passport_number: patient.passport_number || "",
-    date_of_birth: patient.date_of_birth,
+    date_of_birth: patient.date_of_birth || "",
     gender: patient.gender || "",
     email: patient.email || "",
     phone: patient.phone || "",
@@ -32,9 +61,17 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
     blood_type: patient.blood_type || "",
     allergies: patient.allergies || "",
     chronic_conditions: patient.chronic_conditions || "",
+    medical_history: patient.medical_history || "", // Now these properties exist
+    current_medications: patient.current_medications || "", // Now these properties exist
     emergency_contact_name: patient.emergency_contact_name || "",
     emergency_contact_phone: patient.emergency_contact_phone || "",
-    is_active: patient.is_active,
+    emergency_contact_relationship: patient.emergency_contact_relationship || "", // Now these properties exist
+    employee_number: patient.employee_number || "",
+    job_title: patient.job_title || "",
+    department: patient.department || "",
+    notes: patient.notes || "",
+    is_active: patient.is_active ?? true,
+    consent_given: patient.consent_given || false,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,34 +79,17 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
     setIsLoading(true)
 
     try {
-      console.log("Submitting form data:", formData)
+      const result = await updatePatient(patient.id, formData)
       
-      // Use absolute URL to avoid routing issues
-      const response = await fetch(`/api/clinic/patients/${patient.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      })
-
-      console.log("Response status:", response.status)
-      console.log("Response headers:", response.headers)
-      
-      const responseData = await response.text()
-      console.log("Response data:", responseData)
-      
-      if (response.ok) {
-        console.log("Patient updated successfully")
+      if (result.success) {
         router.push(`/clinic/patients/${patient.id}`)
         router.refresh()
       } else {
-        console.error("Failed to update patient:", responseData)
-        alert(`Failed to update patient: ${responseData}`)
+        alert(`Failed to update patient: ${result.error}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating patient:", error)
-      alert(`Error updating patient: ${error}`)
+      alert(`Error updating patient: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -77,22 +97,46 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name as keyof FormData]: value }))
+  }
+
+  const handleSelectChange = (name: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
+  // Fix for the checkbox handler - specify correct type
+  const handleCheckboxChange = (name: keyof FormData, checked: boolean) => {
+    setFormData((prev) => ({ ...prev, [name]: checked }))
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Security Notice */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+          <div>
+            <p className="font-medium text-blue-800">Secure Update</p>
+            <p className="text-sm text-blue-700">
+              Changes to sensitive fields will be encrypted using AES-256. 
+              Field access is controlled by role-based permissions.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-6">
         {/* Personal Information */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Personal Information</h3>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            Personal Information
+            <Lock className="h-4 w-4 text-muted-foreground" />
+          </h3>
           
           <div className="space-y-2">
-            <Label htmlFor="first_name">First Name *</Label>
+            <Label htmlFor="first_name" className="flex items-center gap-1">
+              First Name <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="first_name"
               name="first_name"
@@ -103,7 +147,9 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="last_name">Last Name *</Label>
+            <Label htmlFor="last_name" className="flex items-center gap-1">
+              Last Name <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="last_name"
               name="last_name"
@@ -114,7 +160,10 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="id_number">ID Number *</Label>
+            <Label htmlFor="id_number" className="flex items-center gap-1">
+              ID Number <span className="text-destructive">*</span>
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="id_number"
               name="id_number"
@@ -122,10 +171,14 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
               onChange={handleChange}
               required
             />
+            <p className="text-xs text-muted-foreground">Encrypted using AES-256</p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="passport_number">Passport Number</Label>
+            <Label htmlFor="passport_number" className="flex items-center gap-1">
+              Passport Number
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="passport_number"
               name="passport_number"
@@ -135,7 +188,9 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="date_of_birth">Date of Birth *</Label>
+            <Label htmlFor="date_of_birth">
+              Date of Birth <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="date_of_birth"
               name="date_of_birth"
@@ -167,10 +222,16 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
 
         {/* Contact Information */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Contact Information</h3>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            Contact Information
+            <Lock className="h-4 w-4 text-muted-foreground" />
+          </h3>
           
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="flex items-center gap-1">
+              Email
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="email"
               name="email"
@@ -181,7 +242,10 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="phone" className="flex items-center gap-1">
+              Phone
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="phone"
               name="phone"
@@ -191,7 +255,10 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+            <Label htmlFor="address" className="flex items-center gap-1">
+              Address
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Textarea
               id="address"
               name="address"
@@ -219,6 +286,7 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
                 <SelectItem value="AB-">AB-</SelectItem>
                 <SelectItem value="O+">O+</SelectItem>
                 <SelectItem value="O-">O-</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -227,10 +295,17 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
 
       {/* Medical Information */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Medical Information</h3>
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Shield className="h-5 w-5 text-red-600" />
+          Medical Information
+          <span className="text-xs text-muted-foreground font-normal ml-2">(Doctors/Nurses Only)</span>
+        </h3>
         
         <div className="space-y-2">
-          <Label htmlFor="allergies">Allergies</Label>
+          <Label htmlFor="allergies" className="flex items-center gap-1">
+            Allergies
+            <Lock className="h-3 w-3 text-muted-foreground" />
+          </Label>
           <Textarea
             id="allergies"
             name="allergies"
@@ -242,7 +317,10 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="chronic_conditions">Chronic Conditions</Label>
+          <Label htmlFor="chronic_conditions" className="flex items-center gap-1">
+            Chronic Conditions
+            <Lock className="h-3 w-3 text-muted-foreground" />
+          </Label>
           <Textarea
             id="chronic_conditions"
             name="chronic_conditions"
@@ -252,15 +330,51 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
             placeholder="List any chronic conditions..."
           />
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="medical_history" className="flex items-center gap-1">
+            Medical History
+            <Lock className="h-3 w-3 text-muted-foreground" />
+          </Label>
+          <Textarea
+            id="medical_history"
+            name="medical_history"
+            value={formData.medical_history}
+            onChange={handleChange}
+            rows={3}
+            placeholder="Previous medical conditions, surgeries, etc."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="current_medications" className="flex items-center gap-1">
+            Current Medications
+            <Lock className="h-3 w-3 text-muted-foreground" />
+          </Label>
+          <Textarea
+            id="current_medications"
+            name="current_medications"
+            value={formData.current_medications}
+            onChange={handleChange}
+            rows={2}
+            placeholder="List current medications and dosages"
+          />
+        </div>
       </div>
 
       {/* Emergency Contact */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Emergency Contact</h3>
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          Emergency Contact
+          <Lock className="h-4 w-4 text-muted-foreground" />
+        </h3>
         
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid md:grid-cols-3 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="emergency_contact_name">Name</Label>
+            <Label htmlFor="emergency_contact_name" className="flex items-center gap-1">
+              Name
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="emergency_contact_name"
               name="emergency_contact_name"
@@ -270,7 +384,10 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="emergency_contact_phone">Phone</Label>
+            <Label htmlFor="emergency_contact_phone" className="flex items-center gap-1">
+              Phone
+              <Lock className="h-3 w-3 text-muted-foreground" />
+            </Label>
             <Input
               id="emergency_contact_phone"
               name="emergency_contact_phone"
@@ -278,21 +395,110 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
               onChange={handleChange}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="emergency_contact_relationship">Relationship</Label>
+            <Select
+              value={formData.emergency_contact_relationship}
+              onValueChange={(value) => handleSelectChange("emergency_contact_relationship", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select relationship" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="spouse">Spouse</SelectItem>
+                <SelectItem value="parent">Parent</SelectItem>
+                <SelectItem value="child">Child</SelectItem>
+                <SelectItem value="sibling">Sibling</SelectItem>
+                <SelectItem value="friend">Friend</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      {/* Status */}
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id="is_active"
-          checked={formData.is_active}
-          onCheckedChange={(checked) =>
-            setFormData((prev) => ({ ...prev, is_active: checked as boolean }))
-          }
-        />
-        <Label htmlFor="is_active" className="cursor-pointer">
-          Patient is active
-        </Label>
+      {/* Employment Information */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Employment Information</h3>
+        
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="employee_number">Employee Number</Label>
+            <Input
+              id="employee_number"
+              name="employee_number"
+              value={formData.employee_number}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="job_title">Job Title</Label>
+            <Input
+              id="job_title"
+              name="job_title"
+              value={formData.job_title}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="department">Department</Label>
+            <Input
+              id="department"
+              name="department"
+              value={formData.department}
+              onChange={handleChange}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Additional Notes</h3>
+        
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            rows={3}
+            placeholder="Any additional information about the patient"
+          />
+        </div>
+      </div>
+
+      {/* Status & Consent */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="is_active"
+            checked={formData.is_active}
+            onCheckedChange={(checked) =>
+              handleCheckboxChange("is_active", checked as boolean)
+            }
+          />
+          <Label htmlFor="is_active" className="cursor-pointer">
+            Patient is active
+          </Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="consent_given"
+            checked={formData.consent_given}
+            onCheckedChange={(checked) =>
+              handleCheckboxChange("consent_given", checked as boolean)
+            }
+          />
+          <Label htmlFor="consent_given" className="cursor-pointer">
+            Consent for treatment given
+          </Label>
+        </div>
       </div>
 
       {/* Actions */}
@@ -304,9 +510,18 @@ export function EditPatientForm({ patient }: EditPatientFormProps) {
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading}>
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Update Patient
+        <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Updating Patient...
+            </>
+          ) : (
+            <>
+              <Shield className="mr-2 h-4 w-4" />
+              Update Patient Securely
+            </>
+          )}
         </Button>
       </div>
     </form>

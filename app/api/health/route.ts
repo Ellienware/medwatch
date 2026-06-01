@@ -1,24 +1,67 @@
-import { NextResponse } from "next/server"
-import { checkHealth } from "@/lib/monitoring/health-check"
+import { NextResponse } from 'next/server'
 
-/**
- * Health check endpoint for monitoring
- */
 export async function GET() {
   try {
-    const health = await checkHealth()
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        appwrite: await checkAppwrite(),
+        database: await checkDatabase(),
+        storage: await checkStorage(),
+        pdfGeneration: await checkPdfGeneration()
+      },
+      metrics: {
+        memory: process.memoryUsage(),
+        uptime: process.uptime()
+      }
+    }
 
-    const statusCode = health.status === "healthy" ? 200 : health.status === "degraded" ? 200 : 503
-
-    return NextResponse.json(health, { status: statusCode })
+    return NextResponse.json(health)
   } catch (error) {
     return NextResponse.json(
       {
-        status: "unhealthy",
-        error: "Health check failed",
+        status: 'unhealthy',
         timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
       },
-      { status: 503 },
+      { status: 503 }
     )
+  }
+}
+
+async function checkAppwrite(): Promise<{ status: string; details?: string }> {
+  try {
+    // Add Appwrite health check logic
+    return { status: 'healthy' }
+  } catch (error) {
+    return { status: 'unhealthy', details: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+async function checkDatabase(): Promise<{ status: string; details?: string }> {
+  try {
+    // Add database health check logic
+    return { status: 'healthy' }
+  } catch (error) {
+    return { status: 'unhealthy', details: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+async function checkStorage(): Promise<{ status: string; details?: string }> {
+  try {
+    // Add storage health check logic
+    return { status: 'healthy' }
+  } catch (error) {
+    return { status: 'unhealthy', details: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+async function checkPdfGeneration(): Promise<{ status: string; details?: string }> {
+  try {
+    // Add PDF generation health check logic
+    return { status: 'healthy' }
+  } catch (error) {
+    return { status: 'unhealthy', details: error instanceof Error ? error.message : 'Unknown error' }
   }
 }

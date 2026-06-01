@@ -15,6 +15,7 @@ export const COLLECTIONS = {
   TEST_RESULTS: "test_results",
   CERTIFICATES: "certificates",
   INVOICES: "invoices",
+  CLINICAL_ASSESSMENTS: "clinical_assessments",
   NOTIFICATIONS: "notifications",
   AUDIT_LOGS: "audit_logs",
   SUBSCRIPTIONS: "subscriptions",
@@ -22,6 +23,12 @@ export const COLLECTIONS = {
   PAYMENT_METHODS: "payment_methods",
   ACTIVITIES: "activities",
   CERTIFICATE_TEMPLATES: "certificate_templates",
+}
+
+// Function IDs
+export const FUNCTIONS = {
+  SECURE_PATIENT: process.env.NEXT_PUBLIC_SECURE_PATIENT_FUNCTION_ENDPOINT!,
+  SECURE_TEST_RESULT: process.env.NEXT_PUBLIC_SECURE_TEST_RESULT_FUNCTION_ENDPOINT!,
 }
 
 // Storage bucket ID - single bucket for all file types

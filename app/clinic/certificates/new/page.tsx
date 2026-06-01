@@ -1,4 +1,5 @@
-import { IssueCertificateForm } from "@/components/clinic/certificates/issue-certificate-form"
+//clinic/certificates/new
+import { CertificateReviewForm } from "@/components/clinic/certificates/certificate-review-form"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -18,7 +19,7 @@ export default function IssueCertificatePage() {
         </div> */}
       </div>
 
-      <IssueCertificateForm />
+        <CertificateReviewForm />
     </div>
   )
 }

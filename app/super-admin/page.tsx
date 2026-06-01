@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { StatsCard } from "@/components/super-admin/stats-card"
 import { RecentClinics } from "@/components/super-admin/recent-clinics"
 import { SystemHealth } from "@/components/super-admin/system-health"

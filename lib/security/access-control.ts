@@ -8,50 +8,53 @@
 import type { UserRole } from "@/lib/types/database"
 import type { AuditEntityType } from "./audit-log"
 
+// Define allowed actions
+export type PermissionAction = "create" | "read" | "update" | "delete" | "export" | "print"
+
 /**
  * Define permissions for each role
  */
 const ROLE_PERMISSIONS = {
   super_admin: {
     // Super admin has access to everything
-    "*": ["create", "read", "update", "delete", "export"],
+    "*": ["create", "read", "update", "delete", "export", "print"] as PermissionAction[],
   },
   clinic_admin: {
     // Clinic admin has full access within their clinic
-    patient: ["create", "read", "update", "delete", "export"],
-    appointment: ["create", "read", "update", "delete", "export"],
-    test_result: ["create", "read", "update", "delete", "export"],
-    certificate: ["create", "read", "update", "delete", "export"],
-    user: ["create", "read", "update", "delete"],
-    employer: ["create", "read", "update", "delete"],
-    clinic: ["read", "update"],
-    branch: ["create", "read", "update", "delete"],
-    subscription: ["read"],
-    payment: ["read"],
+    patient: ["create", "read", "update", "delete", "export"] as PermissionAction[],
+    appointment: ["create", "read", "update", "delete", "export"] as PermissionAction[],
+    test_result: ["create", "read", "update", "delete", "export"] as PermissionAction[],
+    certificate: ["create", "read", "update", "delete", "export"] as PermissionAction[],
+    user: ["create", "read", "update", "delete"] as PermissionAction[],
+    employer: ["create", "read", "update", "delete"] as PermissionAction[],
+    clinic: ["read", "update"] as PermissionAction[],
+    branch: ["create", "read", "update", "delete"] as PermissionAction[],
+    subscription: ["read"] as PermissionAction[],
+    payment: ["read"] as PermissionAction[],
   },
   receptionist: {
-    patient: ["create", "read", "update"],
-    appointment: ["create", "read", "update"],
-    test_result: ["read"],
-    certificate: ["read"],
-    employer: ["read"],
+    patient: ["create", "read", "update"] as PermissionAction[],
+    appointment: ["create", "read", "update"] as PermissionAction[],
+    test_result: ["read"] as PermissionAction[],
+    certificate: ["read"] as PermissionAction[],
+    employer: ["read"] as PermissionAction[],
   },
   nurse: {
-    patient: ["read", "update"],
-    appointment: ["read", "update"],
-    test_result: ["create", "read", "update"],
-    certificate: ["read"],
+    patient: ["read", "update"] as PermissionAction[],
+    appointment: ["read", "update"] as PermissionAction[],
+    test_result: ["create", "read", "update"] as PermissionAction[],
+    certificate: ["read"] as PermissionAction[],
   },
   doctor: {
-    patient: ["read", "update"],
-    appointment: ["read", "update"],
-    test_result: ["read", "update"],
-    certificate: ["create", "read", "update"],
+    patient: ["read", "update"] as PermissionAction[],
+    appointment: ["read", "update"] as PermissionAction[],
+    test_result: ["read", "update"] as PermissionAction[],
+    certificate: ["create", "read", "update"] as PermissionAction[],
   },
   employer: {
     // Employers can only view their own employees and certificates
-    patient: ["read"],
-    certificate: ["read"],
+    patient: ["read"] as PermissionAction[],
+    certificate: ["read"] as PermissionAction[],
   },
 } as const
 
@@ -66,14 +69,16 @@ export function hasPermission(role: UserRole, entityType: string, action: string
   }
 
   // Super admin has all permissions
-  if ("*" in permissions && permissions["*"].includes(action)) {
-    return true
+  if ("*" in permissions) {
+    const adminPermissions = permissions["*"] as readonly PermissionAction[]
+    return adminPermissions.includes(action as PermissionAction)
   }
 
   // Check specific entity type permissions
-  if (entityType in permissions) {
-    const entityPermissions = permissions[entityType as keyof typeof permissions]
-    return Array.isArray(entityPermissions) && entityPermissions.includes(action)
+  const entityPermissions = permissions[entityType as keyof typeof permissions] as readonly PermissionAction[] | undefined
+  
+  if (entityPermissions) {
+    return entityPermissions.includes(action as PermissionAction)
   }
 
   return false
@@ -109,7 +114,8 @@ export function canDecryptFields(role: UserRole): boolean {
   }
 
   // All medical staff can decrypt
-  return ["nurse", "doctor", "clinic_admin", "super_admin"].includes(role)
+  const medicalStaff: UserRole[] = ["nurse", "doctor", "clinic_admin", "super_admin"]
+  return medicalStaff.includes(role)
 }
 
 /**
@@ -185,7 +191,20 @@ export function getAllowedDecryptionFields(role: UserRole, entityType: AuditEnti
     },
   }
 
-  return fieldAccess[role][entityType] || []
+  return fieldAccess[role]?.[entityType] || []
+}
+
+/**
+ * Check if a user can decrypt a specific field
+ */
+export function canDecryptField(role: UserRole, fieldName: string, entityType: AuditEntityType): boolean {
+  const allowedFields = getAllowedDecryptionFields(role, entityType)
+  
+  if (allowedFields.includes("*")) {
+    return true
+  }
+  
+  return allowedFields.includes(fieldName)
 }
 
 /**
@@ -215,4 +234,21 @@ export function validateAccess(params: {
   }
 
   return { allowed: true }
+}
+
+/**
+ * Helper function to check patient data access
+ */
+export function canAccessPatientData(
+  role: UserRole, 
+  targetClinicId: string, 
+  userClinicId: string | null
+): boolean {
+  // Check clinic access first
+  if (!canAccessClinic(userClinicId, targetClinicId, role)) {
+    return false
+  }
+  
+  // Check if role can access patients
+  return hasPermission(role, "patient", "read")
 }

@@ -2,8 +2,9 @@
  * Health check utilities for monitoring system health
  */
 
-import { createServerClient } from "@/lib/appwrite/client"
+
 import { APPWRITE_DATABASE_ID, COLLECTIONS } from "@/lib/appwrite/config"
+import { createServerClient } from "../appwrite"
 
 export type HealthStatus = {
   status: "healthy" | "degraded" | "unhealthy"

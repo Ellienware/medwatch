@@ -15,6 +15,7 @@ const EMAIL_CONFIG = {
 }
 
 // ========== INTERFACES ==========
+
 export interface EmailOptions {
   to: string | string[]
   subject: string
@@ -67,9 +68,15 @@ export interface CertificateEmailData {
   clinicName: string
   downloadUrl?: string
   employerName?: string
-  templateName?: string; 
+  templateName?: string;
+  
+  // Add these optional properties:
+  isComputerAssisted?: boolean
+  confidence?: number
+  restrictions?: string | null
+  requiresFollowUp?: boolean
+  hasRestrictions?: boolean // If you still need this
 }
-
 export interface AppointmentReminderEmailData {
   patientName: string
   appointmentDate: string

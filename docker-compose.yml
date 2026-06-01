@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: medsurve-app-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+      - NEXT_PUBLIC_APPWRITE_PROJECT_ID=693d3ac6003091b9ba43
+      - NEXT_PUBLIC_APPWRITE_DATABASE_ID=medsurv_db
+      - NEXT_PUBLIC_APPWRITE_STORAGE_BUCKET_ID=medsurv_storage
+      - APPWRITE_API_KEY=standard_acc06a08ae7c23f5f95005bb22362c2ef4858878d0f773631f31249d37f71a1c048126ba7071cf6cfe4538f2205abf2f27df9471f42733c24bd90e6dd3a1db2b26601dd7f5c4c2b7a04b1be9d12616ebe414044c03700df2cab2b318866ef7e066af6c538b070d0202364ddffd8ec655020f63c5b4a83dd175428845215ab66a
+      - ENCRYPTION_KEY=dev_key_change_this_in_production
+      - BREVO_API_KEY=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
+      - EMAIL_FROM=nelisatest@gmail.com
+      - EMAIL_FROM_NAME=MedWatch
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - ENABLE_LOGGING=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -1,3 +1,4 @@
+// components/clinic/certificates/download-certificate-button.tsx - Updated
 "use client"
 
 import { useState } from "react"
@@ -7,15 +8,21 @@ import { toast } from "sonner"
 
 interface DownloadCertificateButtonProps {
   certificateId: string
+  certificateType?: string
 }
 
-export function DownloadCertificateButton({ certificateId }: DownloadCertificateButtonProps) {
+export function DownloadCertificateButton({ 
+  certificateId,
+  certificateType = "fit_to_work" 
+}: DownloadCertificateButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false)
 
   const handleDownload = async () => {
     setIsGenerating(true)
 
     try {
+      // Use the fitness certificate endpoint for all certificates
+      // (since all certificates must use the fixed fitness template)
       const response = await fetch("/api/certificates/generate-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -24,6 +31,13 @@ export function DownloadCertificateButton({ certificateId }: DownloadCertificate
 
       if (!response.ok) {
         const error = await response.json()
+        
+        // Handle single page constraint error
+        if (error.code === "SINGLE_PAGE_LIMIT") {
+          toast.error("Certificate content is too large. Please reduce content or contact support.")
+          return
+        }
+        
         throw new Error(error.error || "Failed to generate PDF")
       }
 
@@ -32,7 +46,7 @@ export function DownloadCertificateButton({ certificateId }: DownloadCertificate
       if (data.pdfUrl) {
         // Open PDF in new tab
         window.open(data.pdfUrl, "_blank")
-        toast.success("Certificate PDF generated successfully")
+        toast.success("Fitness Certificate PDF generated successfully")
       }
     } catch (error) {
       console.error("[v0] Error downloading certificate:", error)

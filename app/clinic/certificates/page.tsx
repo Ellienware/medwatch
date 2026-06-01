@@ -1,3 +1,5 @@
+//clinic/certificates/
+export const dynamic = 'force-dynamic';
 import { CertificatesTable } from "@/components/clinic/certificates/certificates-table"
 import { CertificatesSearch } from "@/components/clinic/certificates/certificates-search"
 import { Button } from "@/components/ui/button"

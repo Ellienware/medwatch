@@ -11,28 +11,52 @@ interface AppointmentTestsProps {
   patientId: string
 }
 
+// Define the test result type
+interface TestResult {
+  id: string
+  test_id: string
+  test_name?: string
+  performed_by?: string
+  performed_at: string
+  is_normal: boolean | null
+  // Add other properties that might be returned
+  test_code?: string
+  appointment_id?: string
+  patient_id?: string
+  results?: any
+  findings?: string
+  recommendations?: string
+  reviewed_by?: string
+  reviewed_at?: string | null
+  is_sensitive?: boolean
+  requires_review?: boolean
+  clinic_id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+// Test type icons
+const testIcons: Record<string, React.ReactNode> = {
+  audiometry: <Activity className="h-4 w-4" />,
+  spirometry: <Activity className="h-4 w-4" />,
+  vision: <Eye className="h-4 w-4" />,
+  xray: <Activity className="h-4 w-4" />,
+  bp: <Heart className="h-4 w-4" />,
+  drug: <Activity className="h-4 w-4" />,
+  hiv: <Microscope className="h-4 w-4" />,
+  malaria: <Droplets className="h-4 w-4" />,
+  hepatitis_b: <Microscope className="h-4 w-4" />,
+  hepatitis_c: <Microscope className="h-4 w-4" />,
+  syphilis: <Microscope className="h-4 w-4" />,
+  urinalysis: <Droplets className="h-4 w-4" />,
+  blood_glucose: <Activity className="h-4 w-4" />,
+  cholesterol: <Activity className="h-4 w-4" />,
+  ecg: <Heart className="h-4 w-4" />,
+}
+
 export async function AppointmentTests({ appointmentId, patientId }: AppointmentTestsProps) {
   const result = await getTestResultsByAppointment(appointmentId)
-  const tests = result.success ? result.testResults : []
-
-  // Test type icons
-  const testIcons: Record<string, React.ReactNode> = {
-    audiometry: <Activity className="h-4 w-4" />,
-    spirometry: <Activity className="h-4 w-4" />,
-    vision: <Eye className="h-4 w-4" />,
-    xray: <Activity className="h-4 w-4" />,
-    bp: <Heart className="h-4 w-4" />,
-    drug: <Activity className="h-4 w-4" />,
-    hiv: <Microscope className="h-4 w-4" />,
-    malaria: <Droplets className="h-4 w-4" />,
-    hepatitis_b: <Microscope className="h-4 w-4" />,
-    hepatitis_c: <Microscope className="h-4 w-4" />,
-    syphilis: <Microscope className="h-4 w-4" />,
-    urinalysis: <Droplets className="h-4 w-4" />,
-    blood_glucose: <Activity className="h-4 w-4" />,
-    cholesterol: <Activity className="h-4 w-4" />,
-    ecg: <Heart className="h-4 w-4" />,
-  }
+  const tests: TestResult[] = result.success ? (result.testResults as TestResult[]) : []
 
   return (
     <Card>
@@ -53,14 +77,18 @@ export async function AppointmentTests({ appointmentId, patientId }: Appointment
       <CardContent>
         {tests.length > 0 ? (
           <div className="space-y-3">
-            {tests.map((test) => (
+            {tests.map((test: TestResult) => (
               <div key={test.id} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    {testIcons[test.test_code] || <FileText className="h-5 w-5 text-primary" />}
+                    {testIcons[test.test_id] || <FileText className="h-5 w-5 text-primary" />}
                   </div>
                   <div>
-                    <p className="font-medium capitalize">{test.test_code.replace('_', ' ')}</p>
+                    <p className="font-medium capitalize">{
+                      test.test_name || 
+                      (test.test_code ? test.test_code.replace('_', ' ') : 
+                      test.test_id ? test.test_id.replace('_', ' ') : 'Test')
+                    }</p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span>Performed by: {test.performed_by?.substring(0, 8) || 'Unknown'}</span>
                       <span>•</span>

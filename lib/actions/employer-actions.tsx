@@ -464,4 +464,3 @@ export async function getActiveEmployers() {
     return { success: false, error: error.message || "Failed to fetch employers", data: [] }
   }
 }
-

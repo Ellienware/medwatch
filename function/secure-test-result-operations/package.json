@@ -1,0 +1,17 @@
+{
+  "name": "secure-test-result-operations",
+  "version": "1.0.0",
+  "description": "Secure test result data operations with encryption",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "npm run build && appwrite functions createDeployment --functionId=698061eb002ae3d7943e --activate=true --entrypoint=dist/index.js --code=."
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

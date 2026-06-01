@@ -5,7 +5,7 @@
  * Required for POPIA compliance and security monitoring
  */
 
-import { createServerClient } from "@/lib/appwrite/client"
+import { createServerClient } from "@/lib/appwrite/server-client"
 import { APPWRITE_DATABASE_ID, COLLECTIONS } from "@/lib/appwrite/config"
 import { ID } from "node-appwrite"
 import logger from "@/lib/logging/logger"

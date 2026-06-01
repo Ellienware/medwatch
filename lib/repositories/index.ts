@@ -5,6 +5,7 @@
 
 import { UserRepository } from "./user-repository"
 import { ClinicRepository } from "./clinic-repository"
+import { AuditLogRepository } from "./audit-log-repository" 
 import { SubscriptionRepository } from "./subscription-repository"
 import { PaymentRepository } from "./payment-repository"
 import { PatientRepository } from "./patient-repository"
@@ -17,6 +18,8 @@ import { BranchRepository } from "./branch-repository"
 import { NotificationRepository } from "./notification-repository"
 import { StaffRepository } from "./staff-repository"
 import { ActivityRepository } from "./activity-repository"
+import { AssessmentRepository } from "./assessment-repository"
+
  // Add this
 
 let userRepository: UserRepository | null = null
@@ -32,13 +35,22 @@ let employerRepository: EmployerRepository | null = null
 let branchRepository: BranchRepository | null = null
 let notificationRepository: NotificationRepository | null = null
 let staffRepository: StaffRepository | null = null
-let activityRepository: ActivityRepository | null = null // Add this
+let activityRepository: ActivityRepository | null = null
+let assessmentRepository: AssessmentRepository | null = null
+let auditLogRepository: AuditLogRepository | null = null
 
 export function getUserRepository(): UserRepository {
   if (!userRepository) {
     userRepository = new UserRepository()
   }
   return userRepository
+}
+
+export function getAuditLogRepository(): AuditLogRepository {
+  if (!auditLogRepository) {
+    auditLogRepository = new AuditLogRepository()
+  }
+  return auditLogRepository
 }
 
 export function getStaffRepository(): StaffRepository {
@@ -125,11 +137,18 @@ export function getNotificationRepository(): NotificationRepository {
   return notificationRepository
 }
 
-export function getActivityRepository(): ActivityRepository { // Add this
+export function getActivityRepository(): ActivityRepository {
   if (!activityRepository) {
     activityRepository = new ActivityRepository()
   }
   return activityRepository
+}
+
+export function getAssessmentRepository(): AssessmentRepository {
+  if (!assessmentRepository) {
+    assessmentRepository = new AssessmentRepository()
+  }
+  return assessmentRepository
 }
 
 // Only export repository classes, not entity types
@@ -148,5 +167,6 @@ export {
   BranchRepository,
   NotificationRepository,
   StaffRepository,
-  ActivityRepository // Add this
+  ActivityRepository,
+  AssessmentRepository,
 }

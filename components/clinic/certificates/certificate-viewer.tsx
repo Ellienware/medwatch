@@ -1,4 +1,4 @@
-// components/clinic/certificates/certificate-viewer.tsx - Fix the errors
+//components/clinic/certificates/certificate-viewer.tsx
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { FileText, Download, Printer, Mail, Building, Phone, Mail as MailIcon } from "lucide-react"
 import type { Certificate, Patient, Clinic, Branch, TestResult } from "@/lib/types/database"
+import { DateFormatter } from "@/lib/utils/date-formatter"
+
+interface EnhancedPatient extends Patient {
+  employer_company_name?: string
+}
+
+interface EnhancedTestResult extends Omit<TestResult, 'results'> {
+  results?: Record<string, any> | string; // Make it optional if needed
+  test_name: string;
+}
 
 interface CertificateViewerProps {
   certificate: Certificate
@@ -22,13 +32,8 @@ export function CertificateViewer({
   branch,
   testResults
 }: CertificateViewerProps) {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
+  const enhancedPatient = patient as EnhancedPatient
+  const enhancedTestResults = testResults as EnhancedTestResult[]
 
   const handlePrint = () => {
     window.print()
@@ -42,12 +47,7 @@ export function CertificateViewer({
 
   // Get company name from employer_id or employer_company_name
   const getCompanyName = () => {
-    // Try to get company name from employer_company_name field
-    if ((patient as any).employer_company_name) {
-      return (patient as any).employer_company_name
-    }
-    // Fall back to employer_id
-    return patient.employer_id || 'N/A'
+    return enhancedPatient.employer_company_name || patient.employer_id || 'N/A'
   }
 
   return (
@@ -56,7 +56,7 @@ export function CertificateViewer({
         <div>
           <h1 className="text-2xl font-bold">Medical Certificate</h1>
           <p className="text-muted-foreground">
-            #{certificate.certificate_number} • {formatDate(certificate.issue_date)}
+            #{certificate.certificate_number} • {DateFormatter.formatForDisplay(certificate.issue_date)}
           </p>
         </div>
         <div className="flex gap-2">
@@ -136,7 +136,7 @@ export function CertificateViewer({
               
               <div>
                 <p className="text-sm text-muted-foreground">Date of Examination</p>
-                <p className="font-medium">{formatDate(certificate.issue_date)}</p>
+                <p className="font-medium">{DateFormatter.formatForDisplay(certificate.issue_date)}</p>
               </div>
               
               <div>
@@ -197,11 +197,11 @@ export function CertificateViewer({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Valid From</p>
-                    <p className="font-medium">{formatDate(certificate.valid_from)}</p>
+                    <p className="font-medium">{DateFormatter.formatForDisplay(certificate.valid_from)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Valid Until</p>
-                    <p className="font-medium">{formatDate(certificate.valid_until)}</p>
+                    <p className="font-medium">{DateFormatter.formatForDisplay(certificate.valid_until)}</p>
                   </div>
                 </div>
               )}
@@ -209,18 +209,17 @@ export function CertificateViewer({
           </div>
 
           {/* Test Results Section */}
-          {testResults.length > 0 && (
+          {enhancedTestResults.length > 0 && (
             <>
               <Separator className="my-6" />
               <div className="mb-8">
                 <h3 className="text-lg font-semibold mb-4">Test Results</h3>
                 <div className="space-y-4">
-                  {testResults.map((test, index) => (
+                  {enhancedTestResults.map((test, index) => (
                     <div key={test.id} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
                         <h4 className="font-semibold">
-                          {/* Use test_name if available, otherwise use a default */}
-                          {(test as any).test_name || `Test ${index + 1}`}
+                          {test.test_name || `Test ${index + 1}`}
                         </h4>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           test.is_normal 
@@ -311,7 +310,7 @@ export function CertificateViewer({
                   {clinic.name}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Date: {formatDate(certificate.issue_date)}
+                  Date: {DateFormatter.formatForDisplay(certificate.issue_date)}
                 </p>
               </div>
             </div>

@@ -1,3 +1,4 @@
+//components/clinic/certificates/certificates-search.tsx
 "use client"
 
 import { Input } from "@/components/ui/input"
