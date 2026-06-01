@@ -2,7 +2,7 @@ import { EmployerCertificatesTable } from "@/components/employer/employer-certif
 import { Input } from "@/components/ui/input"
 import { Search, Filter } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
+export const dynamic = 'force-dynamic'
 export default function EmployerCertificatesPage() {
   return (
     <div className="space-y-6">

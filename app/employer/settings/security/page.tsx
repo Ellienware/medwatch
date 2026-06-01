@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, CheckCircle, Shield, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-
+export const dynamic = 'force-dynamic'
 export default function SecuritySettingsPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)

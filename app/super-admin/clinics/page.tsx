@@ -2,7 +2,7 @@ import { ClinicsTable } from "@/components/super-admin/clinics-table"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import Link from "next/link"
-
+export const dynamic = 'force-dynamic'
 export default function ClinicsPage() {
   return (
     <div className="space-y-6">

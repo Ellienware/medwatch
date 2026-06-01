@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 import { getCurrentUser } from "@/lib/auth/actions"
 import { getEmployerRepository } from "@/lib/repositories"
-
+export const dynamic = 'force-dynamic'
 export default async function EmployeesPage() {
   // Get current user
   const user = await getCurrentUser()
